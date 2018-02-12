@@ -41,6 +41,7 @@ data Options = Options
   , _optRegion       :: Region
   , _optInputTopic   :: TopicName
   , _consumerGroupId :: ConsumerGroupId
+  , _outputSqsUrl    :: String
   , _optKafkaConfig  :: KafkaConfig
   , _optStatsConfig  :: StatsConfig
   } deriving (Show)
@@ -133,6 +134,10 @@ optParser = Options
   <*> ( ConsumerGroupId <$> strOption
     (  long "kafka-group-id"
     <> metavar "GROUP_ID"
+    <> help "Kafka consumer group id"))
+  <*> ( strOption
+    (  long "output-sqs-url"
+    <> metavar "OUTPUT_SQS_URL"
     <> help "Kafka consumer group id"))
   <*> kafkaConfigParser
   <*> statsConfigParser
