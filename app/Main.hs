@@ -46,7 +46,6 @@ runApplication envApp =
 
     logInfo "Creating Kafka Consumer"
     consumer <- mkConsumer (opt ^. consumerGroupId) (opt ^. optInputTopic)
-    -- producer <- mkProducer -- Use this if you also want a producer.
 
     logInfo "Instantiating Schema Registry"
     sr <- schemaRegistry (kafkaConf ^. schemaRegistryAddress)
@@ -56,10 +55,9 @@ runApplication envApp =
       kafkaSourceNoClose consumer (kafkaConf ^. pollTimeoutMs)
       .| throwLeftSatisfyC KafkaErr isFatal            -- throw any fatal error
       .| skipNonFatalExcept [isPollTimeout]            -- discard any non-fatal except poll timeouts
-      .| rightC (Srv.handleStream sr)                  -- handle messages (see Service.hs)
+      .| rightC (Srv.handleStream opt sr)              -- handle messages (see Service.hs)
       .| everyNSeconds (kafkaConf ^. commitPeriodSec)  -- only commit ever N seconds, so we don't hammer Kafka.
       .| commitOffsetsSink consumer
-      -- .| flushThenCommitSink consumer producer -- Swap with the above if you want a producer.
 
 
 ---------------------- TO BE MOVED TO A LIBRARY -------------------------------
