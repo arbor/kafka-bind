@@ -5,6 +5,7 @@ where
 
 import           Conduit
 import           Control.Arrow         (left)
+import           Control.Lens
 import           Control.Monad
 import           Control.Monad.Except
 import           Data.Aeson            as J
@@ -24,18 +25,20 @@ import qualified Data.Conduit.List as L
 
 import App
 import App.AWS.Sqs
+import App.Options
 
 -- | Handles the stream of incoming messages.
 -- Emit values downstream because offsets are committed based on their present.
 handleStream :: MonadApp m
-             => SchemaRegistry
+             => Options
+             -> SchemaRegistry
              -> Conduit (ConsumerRecord (Maybe ByteString) (Maybe ByteString)) m ()
-handleStream sr =
+handleStream opt sr =
   mapC crValue                 -- extracting only value from consumer record
   .| L.catMaybes               -- discard empty values
   .| mapMC (decodeMessage sr)  -- decode avro message.
   .| mapC failBadly            -- error on decode failure
-  .| mapMC (sendSqs "" . T.pack . C8.unpack . toStrict . J.encode)
+  .| mapMC (sendSqs (T.pack (opt ^. outputSqsUrl)) . T.pack . C8.unpack . toStrict . J.encode)
 
 asExceptT :: Monad m => (e -> e') -> m (Either e a) -> ExceptT e' m a
 asExceptT f me = ExceptT $ left f <$> me
