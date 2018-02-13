@@ -21,9 +21,11 @@ executable kafka-to-sqs
   default-language:     Haskell2010
   build-depends:        base >= 4.7 && < 5
                       , kafka-to-sqs
+                      , aeson
                       , amazonka
                       , amazonka-core
                       , amazonka-s3
+                      , amazonka-sqs
                       , avro
                       , bifunctors
                       , bytestring
@@ -68,15 +70,18 @@ library
                       , App.AppState
                       , App.AWS.Env
                       , App.AWS.S3
+                      , App.AWS.Sqs
                       , App.Kafka
                       , App.Options
                       , App.Orphans
   default-language:     Haskell2010
   ghc-options:          -Wall
   build-depends:        base >= 4.7 && < 5
+                      , aeson
                       , amazonka
                       , amazonka-core
                       , amazonka-s3
+                      , amazonka-sqs
                       , avro
                       , bifunctors
                       , bytestring
