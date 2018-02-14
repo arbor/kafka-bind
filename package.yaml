@@ -93,7 +93,6 @@ executables:
     - kafka-to-sqs
     - aeson
     - amazonka-sqs
-    - etc
     - optparse-applicative
     when:
     - condition: os(osx)

@@ -2,7 +2,7 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: bfaf5e7ec13141f0c181fc306dfda863e37ed8c68c29d1b06a47f8828287df41
+-- hash: 8453bb70bea045a12e76fdd4454d5b107dbcb0a70279d9b3d6b60aa1edbbc2e9
 
 name:           kafka-to-sqs
 version:        1.0.0
@@ -106,7 +106,6 @@ executable kafka-to-sqs
     , containers
     , datadog
     , directory
-    , etc
     , exceptions
     , fast-logger
     , hs-arbor-logger
