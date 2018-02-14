@@ -9,8 +9,8 @@ import Data.Semigroup       ((<>))
 import Network.AWS.S3.Types (Region (..))
 import Options.Applicative
 
-optParser :: Parser (Options Cmd)
-optParser = Options
+optParser :: Parser (GlobalOptions Cmd)
+optParser = GlobalOptions
   <$> readOptionMsg "Valid values are LevelDebug, LevelInfo, LevelWarn, LevelError"
         (  long "log-level"
         <> metavar "LOG_LEVEL"
@@ -25,12 +25,12 @@ optParser = Options
   <*> cmds
   <*> statsConfigParser
 
-optParserInfo :: ParserInfo (Options Cmd)
+optParserInfo :: ParserInfo (GlobalOptions Cmd)
 optParserInfo = info (helper <*> optParser)
   (  fullDesc
   <> progDesc "Bind a kafka topic to another endpoint"
   <> header "Kafka Bind"
   )
 
-parseOptions :: IO (Options Cmd)
+parseOptions :: IO (GlobalOptions Cmd)
 parseOptions = customExecParser (prefs showHelpOnEmpty) optParserInfo

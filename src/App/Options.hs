@@ -37,7 +37,7 @@ data StatsConfig = StatsConfig
   , _statsSampleRate :: SampleRate
   } deriving (Eq, Show)
 
-data Options a = Options
+data GlobalOptions a = GlobalOptions
   { _optLogLevel    :: LogLevel
   , _optRegion      :: Region
   , _optCmd         :: a
@@ -46,9 +46,9 @@ data Options a = Options
 
 makeClassy ''KafkaConfig
 makeClassy ''StatsConfig
-makeClassy ''Options
+makeClassy ''GlobalOptions
 
-instance HasStatsConfig (Options a) where
+instance HasStatsConfig (GlobalOptions a) where
   statsConfig = optStatsConfig
 
 statsConfigParser :: Parser StatsConfig
@@ -109,7 +109,7 @@ kafkaConfigParser = KafkaConfig
     <> help "Kafka consumer offsets commit period (in seconds)"
     )
 
-awsLogLevel :: Options a -> AWS.LogLevel
+awsLogLevel :: GlobalOptions a -> AWS.LogLevel
 awsLogLevel o = case o ^. optLogLevel of
   LevelError -> AWS.Error
   LevelWarn  -> AWS.Error

@@ -61,7 +61,7 @@ parserCmdKafkaToSqs = CmdKafkaToSqs
         <> help "Kafka consumer group id")
   <*> kafkaConfigParser
 
-instance HasKafkaConfig (Options CmdKafkaToSqs) where
+instance HasKafkaConfig (GlobalOptions CmdKafkaToSqs) where
   kafkaConfig = optCmd . cmdKafkaToSqsKafkaConfig
 
 instance HasKafkaConfig (AppEnv CmdKafkaToSqs) where
@@ -90,7 +90,7 @@ instance RunApplication CmdKafkaToSqs where
 -- | Handles the stream of incoming messages.
 -- Emit values downstream because offsets are committed based on their present.
 handleStream  :: MonadApp CmdKafkaToSqs m
-              => Options CmdKafkaToSqs
+              => GlobalOptions CmdKafkaToSqs
               -> SchemaRegistry
               -> Conduit (ConsumerRecord (Maybe ByteString) (Maybe ByteString)) m ()
 handleStream opt sr =

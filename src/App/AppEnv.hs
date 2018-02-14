@@ -17,7 +17,7 @@ data Logger = Logger
   }
 
 data AppEnv o = AppEnv
-  { _appOptions     :: Options o
+  { _appOptions     :: GlobalOptions o
   , _appAwsEnv      :: Env
   , _appStatsClient :: StatsClient
   , _appLogger      :: Logger
