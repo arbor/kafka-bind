@@ -44,8 +44,7 @@ dependencies:
 - transformers-base
 library:
   source-dirs: src
-  default-extensions:
-  - LambdaCase
+  default-extensions: []
   ghc-options: -Wall
   exposed-modules:
   - App

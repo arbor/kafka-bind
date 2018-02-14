@@ -4,22 +4,15 @@ module Main where
 
 import App
 import App.AWS.Env
-import App.Kafka
-import App.Options
 import App.Options.Cmd
 import App.Options.Cmd.KafkaToSqs
 import App.Options.Parser
 import App.RunApplication
 import Arbor.Logger
-import Control.Exception
 import Control.Lens
-import Control.Monad                        (void)
-import Data.Conduit
-import Data.Maybe                           (catMaybes)
 import Data.Semigroup                       ((<>))
 import HaskellWorks.Data.Conduit.Combinator
 import Kafka.Avro                           (schemaRegistry)
-import Kafka.Conduit.Sink                   hiding (logLevel)
 import Kafka.Conduit.Source
 import Network.StatsD                       as S
 import System.Environment

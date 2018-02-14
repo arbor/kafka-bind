@@ -2,7 +2,7 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: bd40aed71204ecb5928a093c93ea126b119c73f87ecfd47a5ab50d022673b8bd
+-- hash: 3cec4c1d2100623d271db29ce31253086361d4f2120350321b96bc35a4999c78
 
 name:           kafka-bind
 version:        1.0.0
@@ -22,7 +22,7 @@ extra-source-files:
 library
   hs-source-dirs:
       src
-  default-extensions: OverloadedStrings TupleSections MultiParamTypeClasses LambdaCase
+  default-extensions: OverloadedStrings TupleSections MultiParamTypeClasses
   ghc-options: -Wall
   build-depends:
       aeson
