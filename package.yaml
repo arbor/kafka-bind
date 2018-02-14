@@ -1,11 +1,11 @@
-name: kafka-to-sqs
+name: kafka-bind
 version: '1.0.0'
 category: Services
 author: Arbor Networks
 maintainer: mayhem@arbor.net
 copyright: Arbor Networks
 license: MIT
-homepage: https://github.com/packetloop/kafka-to-sqs#readme
+homepage: https://github.com/packetloop/kafka-bind#readme
 extra-source-files:
 - README.md
 default-extensions:
@@ -80,7 +80,7 @@ library:
     - -D_Nullable=
     - -D_Nonnull=
 executables:
-  kafka-to-sqs:
+  kafka-bind:
     main: Main.hs
     source-dirs: app
     default-extensions:
@@ -90,7 +90,7 @@ executables:
     - -rtsopts
     - -O2
     dependencies:
-    - kafka-to-sqs
+    - kafka-bind
     - aeson
     - amazonka-sqs
     - optparse-applicative
@@ -108,7 +108,7 @@ tests:
     - -Wall
     - -threaded
     dependencies:
-    - kafka-to-sqs
+    - kafka-bind
     - hspec
     - hedgehog
     when:
