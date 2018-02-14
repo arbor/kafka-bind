@@ -1,7 +1,12 @@
+{-# LANGUAGE ExplicitForAll             #-}
 {-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE RankNTypes                 #-}
 {-# LANGUAGE StandaloneDeriving         #-}
+{-# LANGUAGE TypeSynonymInstances       #-}
+
 module App.Application
 where
 
@@ -25,8 +30,8 @@ import App.Orphans  ()
 
 type AppName = Text
 
-newtype Application a = Application
-  { unApp :: ReaderT AppEnv (StateT AppState (ExceptT AppError (LoggingT AWS))) a
+newtype Application o a = Application
+  { unApp :: ReaderT (AppEnv o) (StateT AppState (ExceptT AppError (LoggingT AWS))) a
   } deriving ( Functor
              , Applicative
              , Monad
@@ -34,7 +39,7 @@ newtype Application a = Application
              , MonadBase IO
              , MonadThrow
              , MonadCatch
-             , MonadReader AppEnv
+             , MonadReader (AppEnv o)
              , MonadState AppState
              , MonadError AppError
              , MonadAWS
@@ -45,7 +50,7 @@ newtype Application a = Application
 -- it also helps to avoid propagating FlexibleContexts requirements
 class MonadError AppError m => MonadAppError m where
 
-class ( MonadReader AppEnv m
+class ( MonadReader (AppEnv o) m
       , MonadState AppState m
       , MonadLogger m
       , MonadAWS m
@@ -55,16 +60,17 @@ class ( MonadReader AppEnv m
       , MonadCatch m
       , MonadError AppError m
       , MonadAppError m
-      , MonadIO m) => MonadApp m where
+      , MonadIO m) => MonadApp o m where
 
-deriving instance MonadAppError Application
-deriving instance MonadApp Application
+deriving instance MonadAppError (Application o)
+deriving instance MonadApp o (Application o)
 
-instance MonadStats Application where
+instance MonadStats (Application o) where
   getStatsClient = reader _appStatsClient
 
-runApplicationM :: AppEnv
-                -> Application ()
+runApplicationM :: Show o
+                => AppEnv o
+                -> Application o ()
                 -> IO (Either AppError AppState)
 runApplicationM envApp f =
   runResourceT

@@ -1,164 +1,181 @@
-name:                kafka-to-sqs
-version:             1.0.0
--- synopsis:
--- description:
-homepage:            https://github.com/packetloop/kafka-to-sqs#readme
-license:             MIT
-license-file:        LICENSE
-author:              Arbor Networks
-maintainer:          mayhem@arbor.net
-copyright:           Arbor Networks
-category:            Services
-build-type:          Simple
-cabal-version:       >=1.10
-extra-source-files:  README.md
+-- This file has been generated from package.yaml by hpack version 0.20.0.
+--
+-- see: https://github.com/sol/hpack
+--
+-- hash: bfaf5e7ec13141f0c181fc306dfda863e37ed8c68c29d1b06a47f8828287df41
 
-executable kafka-to-sqs
-  hs-source-dirs:       app
-  main-is:              Main.hs
-  other-modules:        DevApp
-                      , Service
-  default-language:     Haskell2010
-  build-depends:        base >= 4.7 && < 5
-                      , kafka-to-sqs
-                      , aeson
-                      , amazonka
-                      , amazonka-core
-                      , amazonka-s3
-                      , amazonka-sqs
-                      , avro
-                      , bifunctors
-                      , bytestring
-                      , conduit
-                      , conduit-combinators
-                      , containers
-                      , datadog
-                      , directory
-                      , etc
-                      , exceptions
-                      , fast-logger
-                      , hs-arbor-logger
-                      , hw-conduit
-                      , hw-kafka-avro
-                      , hw-kafka-client
-                      , hw-kafka-conduit
-                      , lens
-                      , monad-control
-                      , monad-logger
-                      , mtl
-                      , network
-                      , random
-                      , optparse-applicative
-                      , resourcet
-                      , text
-                      , transformers
-                      , transformers-base
-  ghc-options:        -threaded -rtsopts -O2
-  default-extensions: OverloadedStrings
-                      TupleSections
-                      MultiParamTypeClasses
-                      LambdaCase
-  if os(darwin)
-    cpp-options: -D__attribute__(A)= -D_Nullable= -D_Nonnull=
+name:           kafka-to-sqs
+version:        1.0.0
+category:       Services
+homepage:       https://github.com/packetloop/kafka-to-sqs#readme
+author:         Arbor Networks
+maintainer:     mayhem@arbor.net
+copyright:      Arbor Networks
+license:        MIT
+license-file:   LICENSE
+build-type:     Simple
+cabal-version:  >= 1.10
+
+extra-source-files:
+    README.md
 
 library
-  hs-source-dirs:       src
-  exposed-modules:      App
-                      , App.Application
-                      , App.AppError
-                      , App.AppEnv
-                      , App.AppState
-                      , App.AWS.Env
-                      , App.AWS.S3
-                      , App.AWS.Sqs
-                      , App.Kafka
-                      , App.Options
-                      , App.Orphans
-  default-language:     Haskell2010
-  ghc-options:          -Wall
-  build-depends:        base >= 4.7 && < 5
-                      , aeson
-                      , amazonka
-                      , amazonka-core
-                      , amazonka-s3
-                      , amazonka-sqs
-                      , avro
-                      , bifunctors
-                      , bytestring
-                      , conduit
-                      , conduit-extra
-                      , conduit-combinators
-                      , containers
-                      , datadog
-                      , directory
-                      , exceptions
-                      , fast-logger
-                      , hs-arbor-logger
-                      , http-types
-                      , hw-conduit
-                      , hw-kafka-avro
-                      , hw-kafka-client
-                      , hw-kafka-conduit
-                      , lens
-                      , monad-control
-                      , monad-logger
-                      , mtl
-                      , network
-                      , optparse-applicative
-                      , random
-                      , resourcet
-                      , split
-                      , text
-                      , transformers
-                      , transformers-base
-  default-extensions: OverloadedStrings
-                      TupleSections
-                      MultiParamTypeClasses
-                      LambdaCase
-  if os(darwin)
+  hs-source-dirs:
+      src
+  default-extensions: OverloadedStrings TupleSections MultiParamTypeClasses LambdaCase
+  ghc-options: -Wall
+  build-depends:
+      aeson
+    , amazonka
+    , amazonka-core
+    , amazonka-s3
+    , amazonka-sqs
+    , avro
+    , base >=4.7 && <5
+    , bifunctors
+    , bytestring
+    , conduit
+    , conduit-combinators
+    , conduit-extra
+    , containers
+    , datadog
+    , directory
+    , exceptions
+    , fast-logger
+    , hs-arbor-logger
+    , http-types
+    , hw-conduit
+    , hw-kafka-avro
+    , hw-kafka-client
+    , hw-kafka-conduit
+    , lens
+    , monad-control
+    , monad-logger
+    , mtl
+    , network
+    , optparse-applicative
+    , random
+    , resourcet
+    , split
+    , text
+    , transformers
+    , transformers-base
+  if os(osx)
     cpp-options: -D__attribute__(A)= -D_Nullable= -D_Nonnull=
+  exposed-modules:
+      App
+      App.Action.KafkaToSqs
+      App.Application
+      App.AppError
+      App.AppEnv
+      App.AppState
+      App.AWS.Env
+      App.AWS.S3
+      App.AWS.Sqs
+      App.Kafka
+      App.Options
+      App.Options.Cmd
+      App.Options.Cmd.Help
+      App.Options.Cmd.KafkaToSqs
+      App.Options.Cmd.SqsToKafka
+      App.Options.Parser
+      App.Orphans
+      App.RunApplication
+  other-modules:
+      Paths_kafka_to_sqs
+  default-language: Haskell2010
+
+executable kafka-to-sqs
+  main-is: Main.hs
+  hs-source-dirs:
+      app
+  default-extensions: OverloadedStrings TupleSections MultiParamTypeClasses LambdaCase
+  ghc-options: -threaded -rtsopts -O2
+  build-depends:
+      aeson
+    , amazonka
+    , amazonka-core
+    , amazonka-s3
+    , amazonka-sqs
+    , avro
+    , base >=4.7 && <5
+    , bifunctors
+    , bytestring
+    , conduit
+    , conduit-combinators
+    , containers
+    , datadog
+    , directory
+    , etc
+    , exceptions
+    , fast-logger
+    , hs-arbor-logger
+    , hw-conduit
+    , hw-kafka-avro
+    , hw-kafka-client
+    , hw-kafka-conduit
+    , kafka-to-sqs
+    , lens
+    , monad-control
+    , monad-logger
+    , mtl
+    , network
+    , optparse-applicative
+    , random
+    , resourcet
+    , text
+    , transformers
+    , transformers-base
+  if os(osx)
+    cpp-options: -D__attribute__(A)= -D_Nullable= -D_Nonnull=
+  other-modules:
+      DevApp
+      Paths_kafka_to_sqs
+  default-language: Haskell2010
 
 test-suite tests
-  type:                 exitcode-stdio-1.0
-  default-language:     Haskell2010
-  hs-source-dirs:       tests
-  other-modules:        App.OptionsSpec
-  main-is:              Spec.hs
-  ghc-options:          -Wall -threaded
-  build-depends:        base >= 4.7 && < 5
-                      , kafka-to-sqs
-                      , hspec
-                      , hedgehog
-                      , amazonka
-                      , amazonka-core
-                      , amazonka-s3
-                      , avro
-                      , bifunctors
-                      , bytestring
-                      , conduit
-                      , conduit-combinators
-                      , containers
-                      , datadog
-                      , directory
-                      , exceptions
-                      , fast-logger
-                      , hs-arbor-logger
-                      , hw-conduit
-                      , hw-kafka-avro
-                      , hw-kafka-client
-                      , hw-kafka-conduit
-                      , lens
-                      , monad-control
-                      , monad-logger
-                      , mtl
-                      , network
-                      , random
-                      , resourcet
-                      , text
-                      , transformers
-                      , transformers-base
-  default-extensions: OverloadedStrings
-                      TupleSections
-                      MultiParamTypeClasses
-  if os(darwin)
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  hs-source-dirs:
+      tests
+  default-extensions: OverloadedStrings TupleSections MultiParamTypeClasses
+  ghc-options: -Wall -threaded
+  build-depends:
+      amazonka
+    , amazonka-core
+    , amazonka-s3
+    , avro
+    , base >=4.7 && <5
+    , bifunctors
+    , bytestring
+    , conduit
+    , conduit-combinators
+    , containers
+    , datadog
+    , directory
+    , exceptions
+    , fast-logger
+    , hedgehog
+    , hs-arbor-logger
+    , hspec
+    , hw-conduit
+    , hw-kafka-avro
+    , hw-kafka-client
+    , hw-kafka-conduit
+    , kafka-to-sqs
+    , lens
+    , monad-control
+    , monad-logger
+    , mtl
+    , network
+    , random
+    , resourcet
+    , text
+    , transformers
+    , transformers-base
+  if os(osx)
     cpp-options: -D__attribute__(A)= -D_Nullable= -D_Nonnull=
+  other-modules:
+      App.OptionsSpec
+      Paths_kafka_to_sqs
+  default-language: Haskell2010

@@ -1,9 +1,14 @@
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE FlexibleInstances      #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE TemplateHaskell        #-}
+
 module App.Options where
 
 import Control.Lens
 import Control.Monad.Logger  (LogLevel (..))
 import Data.Semigroup        ((<>))
+import Data.Text             (Text)
+import Kafka.Types
 import Network.AWS.Data.Text (FromText (..), fromText)
 import Network.AWS.S3.Types  (Region (..))
 import Network.Socket        (HostName)
@@ -11,10 +16,6 @@ import Network.StatsD        (SampleRate (..))
 import Options.Applicative
 import Text.Read             (readEither)
 
-import Kafka.Consumer.Types
-import Kafka.Types
-
-import           Data.Text   (Text)
 import qualified Data.Text   as T
 import qualified Network.AWS as AWS
 
@@ -27,33 +28,27 @@ data KafkaConfig = KafkaConfig
   , _queuedMaxMsgKBytes    :: Int
   , _debugOpts             :: String
   , _commitPeriodSec       :: Int
-  } deriving (Show)
+  } deriving (Eq, Show)
 
 data StatsConfig = StatsConfig
   { _statsHost       :: HostName
   , _statsPort       :: Int
   , _statsTags       :: [StatsTag]
   , _statsSampleRate :: SampleRate
-  } deriving (Show)
+  } deriving (Eq, Show)
 
-data Options = Options
-  { _optLogLevel     :: LogLevel
-  , _optRegion       :: Region
-  , _optInputTopic   :: TopicName
-  , _consumerGroupId :: ConsumerGroupId
-  , _outputSqsUrl    :: String
-  , _optKafkaConfig  :: KafkaConfig
-  , _optStatsConfig  :: StatsConfig
+data Options a = Options
+  { _optLogLevel    :: LogLevel
+  , _optRegion      :: Region
+  , _optCmd         :: a
+  , _optStatsConfig :: StatsConfig
   } deriving (Show)
 
 makeClassy ''KafkaConfig
 makeClassy ''StatsConfig
 makeClassy ''Options
 
-instance HasKafkaConfig Options where
-  kafkaConfig = optKafkaConfig
-
-instance HasStatsConfig Options where
+instance HasStatsConfig (Options a) where
   statsConfig = optStatsConfig
 
 statsConfigParser :: Parser StatsConfig
@@ -114,35 +109,7 @@ kafkaConfigParser = KafkaConfig
     <> help "Kafka consumer offsets commit period (in seconds)"
     )
 
-optParser :: Parser Options
-optParser = Options
-  <$> readOptionMsg "Valid values are LevelDebug, LevelInfo, LevelWarn, LevelError"
-        (  long "log-level"
-        <> metavar "LOG_LEVEL"
-        <> showDefault <> value LevelInfo
-        <> help "Log level.")
-  <*> readOrFromTextOption
-        (  long "region"
-        <> metavar "AWS_REGION"
-        <> showDefault <> value Oregon
-        <> help "The AWS region in which to operate"
-        )
-  <*> ( TopicName <$> strOption
-        (  long "input-topic"
-        <> metavar "TOPIC"
-        <> help "Input topic"))
-  <*> ( ConsumerGroupId <$> strOption
-    (  long "kafka-group-id"
-    <> metavar "GROUP_ID"
-    <> help "Kafka consumer group id"))
-  <*> ( strOption
-    (  long "output-sqs-url"
-    <> metavar "OUTPUT_SQS_URL"
-    <> help "Kafka consumer group id"))
-  <*> kafkaConfigParser
-  <*> statsConfigParser
-
-awsLogLevel :: Options -> AWS.LogLevel
+awsLogLevel :: Options a -> AWS.LogLevel
 awsLogLevel o = case o ^. optLogLevel of
   LevelError -> AWS.Error
   LevelWarn  -> AWS.Error
@@ -166,13 +133,3 @@ string2Tags s = StatsTag . splitTag <$> splitTags
   where
     splitTags = T.split (==',') (T.pack s)
     splitTag t = T.drop 1 <$> T.break (==':') t
-
-optParserInfo :: ParserInfo Options
-optParserInfo = info (helper <*> optParser)
-  (  fullDesc
-  <> progDesc "For each attack caclulates its spuriousity index [0..1]"
-  <> header "Spurious Attacks Detector"
-  )
-
-parseOptions :: IO Options
-parseOptions = execParser optParserInfo
