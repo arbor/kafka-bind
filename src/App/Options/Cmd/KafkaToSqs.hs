@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveAnyClass        #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TemplateHaskell       #-}
@@ -25,7 +26,7 @@ import Data.Maybe                           (catMaybes)
 import Data.Monoid
 import HaskellWorks.Data.Conduit.Combinator
 import Kafka.Avro
-import Kafka.Conduit.Sink                   hiding (logLevel)
+import Kafka.Conduit.Sink
 import Kafka.Conduit.Source
 import Network.StatsD                       as S
 import Options.Applicative
@@ -126,11 +127,11 @@ throwLeftC f = awaitForever $ \msg ->
   throwErrorAs f msg
 
 throwLeftSatisfyC :: MonadAppError m => (e -> AppError) -> (e -> Bool) -> Conduit (Either e a) m (Either e a)
-throwLeftSatisfyC f p = awaitForever $ \msg ->
-  case msg of
+throwLeftSatisfyC f p = awaitForever $ \case
     Right a -> yield (Right a)
     Left e  | p e -> throwErrorAs f (Left e)
     Left e  -> yield (Left e)
+
 -------------------------------------------------------------------------------
 
 withStatsClient :: AppName -> StatsConfig -> (StatsClient -> IO a) -> IO a
@@ -146,5 +147,3 @@ mkStatsTags statsConf = do
   return $ envTags <> (statsConf ^. statsTags <&> toTag)
   where
     toTag (StatsTag (k, v)) = S.tag k v
-
-
