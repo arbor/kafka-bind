@@ -10,6 +10,7 @@ module App.Options.Cmd.SqsToKafka
 import App
 import App.AWS.Sqs
 import App.Kafka
+import App.Options
 import App.RunApplication
 import Arbor.Logger
 import Conduit
@@ -38,15 +39,30 @@ import qualified Data.Conduit.List as L
 import qualified Data.Text         as T
 import qualified System.IO         as P
 
-data CmdSqsToKafka = CmdSqsToKafka deriving (Show, Eq)
+data CmdSqsToKafka = CmdSqsToKafka
+  {
+    _cmdSqsToKafkaInputSqsUrl :: String
+  , _cmdSqsToKafkaOutputTopic :: TopicName
+  , _cmdSqsToKafkaKafkaConfig :: KafkaConfig
+  } deriving (Show, Eq)
 
 makeLenses ''CmdSqsToKafka
 
 instance RunApplication CmdSqsToKafka where
   runApplication envApp = runApplicationM envApp $ do
     liftIO $ P.putStrLn "Not yet implemented"
-    forever $ liftIO $ threadDelay 1000
+    _ <- forever $ liftIO $ threadDelay 1000
     return ()
 
 parserCmdSqsToKafka :: Parser CmdSqsToKafka
-parserCmdSqsToKafka = pure CmdSqsToKafka
+parserCmdSqsToKafka = CmdSqsToKafka
+  <$> strOption
+    (  long "input-sqs-url"
+    <> metavar "SQS_URL"
+    <> help "Input SQS URL")
+  <*> (TopicName <$>
+    strOption
+    (  long "output-topic-name"
+    <> metavar "OUTPUT_TOPIC"
+    <> help "Output kafka topic"))
+  <*> kafkaConfigParser
