@@ -10,17 +10,13 @@ import App.Options.Parser
 import App.RunApplication
 import Arbor.Logger
 import Control.Lens
-import Control.Monad.IO.Class
-import Data.Semigroup                       ((<>))
-import HaskellWorks.Data.Conduit.Combinator
-import Kafka.Avro                           (schemaRegistry)
+import Data.Semigroup             ((<>))
 import Kafka.Conduit.Source
 import Network.AWS.Env
-import Network.StatsD                       as S
+import Network.StatsD             as S
 import System.Environment
 
-import qualified App.Action.KafkaToSqs as C
-import qualified Data.Text             as T
+import qualified Data.Text as T
 
 mkAppEnv :: RunApplication c => StatsClient -> Logger -> Env -> GlobalOptions c -> c -> AppEnv c
 mkAppEnv stats logger envAws opt cmd =
