@@ -1,6 +1,7 @@
-{-# LANGUAGE DeriveAnyClass   #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE TemplateHaskell  #-}
+{-# LANGUAGE DeriveAnyClass    #-}
+{-# LANGUAGE FlexibleContexts  #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE TemplateHaskell   #-}
 
 module App.Options.Cmd.SqsToKafka
   ( CmdSqsToKafka(..)
@@ -29,7 +30,11 @@ import HaskellWorks.Data.Conduit.Combinator
 import Kafka.Avro
 import Kafka.Conduit.Sink
 import Kafka.Conduit.Source
-import Network.StatsD                       as S
+import Network.AWS
+import Network.AWS.SQS.DeleteMessage
+import Network.AWS.SQS.ReceiveMessage
+import Network.AWS.SQS.Types
+import Network.StatsD                       as S hiding (send)
 import Options.Applicative
 
 import qualified Data.Avro.Decode  as A
@@ -48,11 +53,40 @@ data CmdSqsToKafka = CmdSqsToKafka
 
 makeLenses ''CmdSqsToKafka
 
+instance HasKafkaConfig (GlobalOptions CmdSqsToKafka) where
+  kafkaConfig = optCmd . cmdSqsToKafkaKafkaConfig
+
+instance HasKafkaConfig (AppEnv CmdSqsToKafka) where
+  kafkaConfig = appOptions . kafkaConfig
+
 instance RunApplication CmdSqsToKafka where
   runApplication envApp = runApplicationM envApp $ do
-    liftIO $ P.putStrLn "Not yet implemented"
-    _ <- forever $ liftIO $ threadDelay 1000
+    opt <- view appOptions
+    let sqsUrl = opt ^. optCmd . cmdSqsToKafkaInputSqsUrl
+
+    runConduit $
+      receiveMessageC sqsUrl
+      .| effectC (\m -> liftIO (print (m ^. mReceiptHandle)))
+      -- .| handleMessage
+      .| ackMessageC sqsUrl
+      .| sinkNull
     return ()
+
+receiveMessageC :: (MonadLogger m, Monad m, MonadAWS m) => String -> Source m Message
+receiveMessageC sqsUrl = do
+  let rm = receiveMessage (T.pack sqsUrl)
+  rmr <- send (rm & (rmMaxNumberOfMessages .~ Just 10))
+  forM_ (rmr ^.. rmrsMessages . each) Conduit.yield
+  receiveMessageC sqsUrl
+
+ackMessageC :: (MonadLogger m, Monad m, MonadAWS m) => String -> Conduit Message m ()
+ackMessageC sqsUrl =
+  mapMC $ \msg -> do
+    let receipts = msg ^. mReceiptHandle
+
+    forM_ receipts $ \receipt -> do
+      let dm = deleteMessage (T.pack sqsUrl) receipt
+      void $ send dm
 
 parserCmdSqsToKafka :: Parser CmdSqsToKafka
 parserCmdSqsToKafka = CmdSqsToKafka
