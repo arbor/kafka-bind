@@ -8,6 +8,7 @@ license: MIT
 homepage: https://github.com/packetloop/kafka-bind#readme
 extra-source-files:
 - README.md
+- contract/file_change_message.avsc
 default-extensions:
 - OverloadedStrings
 - TupleSections
@@ -45,7 +46,7 @@ dependencies:
 library:
   source-dirs: src
   default-extensions: []
-  ghc-options: -Wall
+  ghc-options: -W
   exposed-modules:
   - App
   - App.Action.KafkaToSqs
@@ -56,6 +57,7 @@ library:
   - App.AWS.Env
   - App.AWS.S3
   - App.AWS.Sqs
+  - App.FileChangeMessage
   - App.Kafka
   - App.Options
   - App.Options.Cmd
@@ -65,12 +67,15 @@ library:
   - App.Options.Parser
   - App.Orphans
   - App.RunApplication
+  - App.SqsMessage
   dependencies:
   - aeson
+  - aeson-lens
   - amazonka-sqs
   - conduit-extra
   - http-types
   - optparse-applicative
+  - unordered-containers
   - split
   when:
   - condition: os(osx)
