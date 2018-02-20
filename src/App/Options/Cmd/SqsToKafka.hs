@@ -10,49 +10,28 @@ module App.Options.Cmd.SqsToKafka
   ) where
 
 import App
-import App.FileChangeMessage
 import App.Kafka
 import App.RunApplication
 import App.SqsMessage
 import Arbor.Logger
 import Conduit
-import Control.Arrow                        (left)
-import Control.Concurrent
-import Control.Exception
 import Control.Lens
 import Control.Monad.Except
-import Data.Aeson                           as J
-import Data.Aeson.Lens                      as JL
-import Data.Bifunctor                       (bimap, first)
-import Data.ByteString                      (ByteString)
-import Data.ByteString.Char8                as C8
-import Data.ByteString.Lazy                 (fromStrict, toStrict)
-import Data.HashMap.Strict                  as HM
-import Data.Maybe                           (catMaybes, fromJust, fromMaybe)
 import Data.Monoid
 import HaskellWorks.Data.Conduit.Combinator
 import Kafka.Avro
 import Kafka.Conduit.Sink
-import Kafka.Conduit.Source
 import Network.AWS
 import Network.AWS.SQS.DeleteMessage
 import Network.AWS.SQS.ReceiveMessage
 import Network.AWS.SQS.Types
-import Network.StatsD                       as S hiding (encodeValue, send)
 import Options.Applicative
 
-import qualified Data.Aeson.Types   as JT
-import qualified Data.Avro.Decode   as A
-import qualified Data.Avro.Schema   as A
-import qualified Data.Avro.Types    as A
-import qualified Data.Conduit.List  as L
-import qualified Data.Text          as T
-import qualified Data.Text.Encoding as TE
-import qualified System.IO          as P
+import qualified Data.ByteString.Lazy as LBS
+import qualified Data.Text            as T
 
 data CmdSqsToKafka = CmdSqsToKafka
-  {
-    _cmdSqsToKafkaInputSqsUrl :: String
+  { _cmdSqsToKafkaInputSqsUrl :: String
   , _cmdSqsToKafkaOutputTopic :: TopicName
   , _cmdSqsToKafkaKafkaConfig :: KafkaConfig
   } deriving (Show, Eq)
@@ -98,7 +77,7 @@ handleMessage sr t@(TopicName topic) producer message = do
   case decodeSqsMessage message of
     Just fcm -> do
       payload <- encodeValue sr (Subject (T.pack topic)) fcm
-      case bimap EncodeErr (ProducerRecord t UnassignedPartition Nothing . Just . toStrict) payload of
+      case bimap EncodeErr (ProducerRecord t UnassignedPartition Nothing . Just . LBS.toStrict) payload of
         Left err -> do
           logInfo $ "err: " <> show err
           return ()
