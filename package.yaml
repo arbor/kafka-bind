@@ -26,6 +26,8 @@ dependencies:
 - containers
 - datadog
 - directory
+- either
+- errors
 - exceptions
 - fast-logger
 - hs-arbor-logger

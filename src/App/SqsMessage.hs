@@ -1,10 +1,6 @@
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE TemplateHaskell #-}
-
 module App.SqsMessage
   ( decodeSqsMessage
-  )
-where
+  ) where
 
 import App.FileChangeMessage
 import Control.Lens
@@ -42,11 +38,11 @@ decodeSqsMessage sqsMessage = do
   -- there is `eTag` field in ObjectCreated:Putevent and no such field in ObjectCreated:Copy
   let objectTag = fromMaybe "" (objectAws  ^. key "eTag")
 
-  return FileChangeMessage {
-      fileChangeMessageEventName  = eventName
+  return FileChangeMessage
+    { fileChangeMessageEventName  = eventName
     , fileChangeMessageEventTime  = eventTime
     , fileChangeMessageBucketName = bucketName
     , fileChangeMessageObjectKey  = objectKey
     , fileChangeMessageObjectSize = objectSize
     , fileChangeMessageObjectTag  = objectTag
-  }
+    }
