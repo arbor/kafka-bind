@@ -1,8 +1,9 @@
-{-# LANGUAGE DeriveAnyClass    #-}
-{-# LANGUAGE FlexibleContexts  #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TemplateHaskell   #-}
+{-# LANGUAGE DeriveAnyClass        #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE TemplateHaskell       #-}
 
 module App.Options.Cmd.SqsToKafka
   ( CmdSqsToKafka(..)
@@ -15,8 +16,11 @@ import App.RunApplication
 import App.SqsMessage
 import Arbor.Logger
 import Conduit
+import Control.Arrow                        (left)
+import Control.Error.Util
 import Control.Lens
 import Control.Monad.Except
+import Data.Either.Combinators
 import Data.Monoid
 import HaskellWorks.Data.Conduit.Combinator
 import Kafka.Avro
@@ -72,24 +76,13 @@ receiveMessageC sqsUrl = do
   forM_ (rmr ^.. rmrsMessages . each) Conduit.yield
   receiveMessageC sqsUrl
 
-handleMessage :: (MonadIO m, MonadLogger m) => SchemaRegistry -> TopicName -> KafkaProducer -> Message -> m ()
+handleMessage :: (MonadIO m, MonadLogger m, MonadError AppError m) => SchemaRegistry -> TopicName -> KafkaProducer -> Message -> m ()
 handleMessage sr t@(TopicName topic) producer message = do
-  case decodeSqsMessage message of
-    Just fcm -> do
-      payload <- encodeValue sr (Subject (T.pack topic)) fcm
-      case bimap EncodeErr (ProducerRecord t UnassignedPartition Nothing . Just . LBS.toStrict) payload of
-        Left err -> do
-          logInfo $ "err: " <> show err
-          return ()
-        Right p -> do
-          _ <- produceMessage producer p
-          logInfo $ "rec: " <> show p
-          return ()
-      return ()
-    Nothing -> do
-       logInfo "nope!"
-       return ()
-  return ()
+  fcm <- decodeSqsMessage message & note (AppErr "Unable to decode SQS message") & eitherToError
+  payload <- encodeValue sr (Subject (T.pack topic)) fcm <&> left EncodeErr >>= eitherToError
+  let p = ProducerRecord t UnassignedPartition Nothing (Just (LBS.toStrict payload))
+  void $ produceMessage producer p
+  logInfo $ "Produced record: " <> show p
 
 ackMessageC :: (Monad m, MonadAWS m) => String -> Conduit Message m ()
 ackMessageC sqsUrl =
