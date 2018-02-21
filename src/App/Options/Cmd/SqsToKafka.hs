@@ -20,9 +20,7 @@ import Control.Arrow                        (left)
 import Control.Error.Util
 import Control.Lens
 import Control.Monad.Except
-import Data.Conduit.List                    (chunksOf)
 import Data.Either.Combinators
-import Data.Maybe                           (catMaybes)
 import Data.Monoid
 import HaskellWorks.Data.Conduit.Combinator
 import Kafka.Avro
@@ -34,6 +32,7 @@ import Network.AWS.SQS.Types
 import Options.Applicative
 
 import qualified Data.ByteString.Lazy as LBS
+import qualified Data.Maybe           as DM (catMaybes)
 import qualified Data.Text            as T
 
 data CmdSqsToKafka = CmdSqsToKafka
@@ -66,31 +65,34 @@ instance RunApplication CmdSqsToKafka where
 
     runConduit $
       receiveMessageC sqsUrl
-      .| effectC (handleMessage sr kafkaTopic producer)
-      .| chunksOf 10
-      .| ackMessageC sqsUrl
+      .| batchByOrFlush (BatchSize 10)
+      .| effectC (handleMessages sr kafkaTopic producer)
+      .| ackMessages sqsUrl
       .| sinkNull
     return ()
 
-receiveMessageC :: MonadAWS m => String -> Source m Message
+receiveMessageC :: MonadAWS m => String -> Source m (Maybe Message)
 receiveMessageC sqsUrl = do
   let rm = receiveMessage (T.pack sqsUrl)
   rmr <- send (rm & (rmMaxNumberOfMessages .~ Just 10))
-  forM_ (rmr ^.. rmrsMessages . each) Conduit.yield
+  case rmr ^.. rmrsMessages . each of
+    []   -> yield Nothing
+    msgs -> forM_ msgs $ yield . Just
   receiveMessageC sqsUrl
 
-handleMessage :: (MonadIO m, MonadLogger m, MonadError AppError m) => SchemaRegistry -> TopicName -> KafkaProducer -> Message -> m ()
-handleMessage sr t@(TopicName topic) producer msg = do
-  fcm <- decodeSqsMessage msg & note (AppErr "Unable to decode SQS message") & eitherToError
-  payload <- encodeValue sr (Subject (T.pack topic)) fcm <&> left EncodeErr >>= eitherToError
-  let p = ProducerRecord t UnassignedPartition Nothing (Just (LBS.toStrict payload))
-  void $ produceMessage producer p
-  logInfo $ "Produced record: " <> show p
+handleMessages :: (MonadIO m, MonadLogger m, MonadError AppError m) => SchemaRegistry -> TopicName -> KafkaProducer -> [Message] -> m ()
+handleMessages sr t@(TopicName topic) producer msgs =
+  forM_ msgs $ \msg -> do
+    fcm <- decodeSqsMessage msg & note (AppErr "Unable to decode SQS message") & eitherToError
+    payload <- encodeValue sr (Subject (T.pack topic)) fcm <&> left EncodeErr >>= eitherToError
+    let p = ProducerRecord t UnassignedPartition Nothing (Just (LBS.toStrict payload))
+    void $ produceMessage producer p
+    logInfo $ "Produced record: " <> show p
 
-ackMessageC :: (Monad m, MonadAWS m) => String -> Conduit [Message] m ()
-ackMessageC sqsUrl =
+ackMessages :: (Monad m, MonadAWS m) => String -> Conduit [Message] m ()
+ackMessages sqsUrl =
   mapMC $ \msgs -> do
-    let receipts = catMaybes $ msgs ^.. each . mReceiptHandle
+    let receipts = DM.catMaybes $ msgs ^.. each . mReceiptHandle
     -- each dmbr needs an ID. just use the list index.
     let dmbres = uncurry (\r i -> deleteMessageBatchRequestEntry (T.pack (show i)) r) <$> zip receipts [0..]
     void $ send $ deleteMessageBatch (T.pack sqsUrl) & dmbEntries .~ dmbres
