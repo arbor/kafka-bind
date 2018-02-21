@@ -20,13 +20,15 @@ import Control.Arrow                        (left)
 import Control.Error.Util
 import Control.Lens
 import Control.Monad.Except
+import Data.Conduit.List                    (chunksOf)
 import Data.Either.Combinators
+import Data.Maybe                           (catMaybes)
 import Data.Monoid
 import HaskellWorks.Data.Conduit.Combinator
 import Kafka.Avro
 import Kafka.Conduit.Sink
 import Network.AWS
-import Network.AWS.SQS.DeleteMessage
+import Network.AWS.SQS.DeleteMessageBatch
 import Network.AWS.SQS.ReceiveMessage
 import Network.AWS.SQS.Types
 import Options.Applicative
@@ -65,6 +67,7 @@ instance RunApplication CmdSqsToKafka where
     runConduit $
       receiveMessageC sqsUrl
       .| effectC (handleMessage sr kafkaTopic producer)
+      .| chunksOf 10
       .| ackMessageC sqsUrl
       .| sinkNull
     return ()
@@ -84,14 +87,13 @@ handleMessage sr t@(TopicName topic) producer msg = do
   void $ produceMessage producer p
   logInfo $ "Produced record: " <> show p
 
-ackMessageC :: (Monad m, MonadAWS m) => String -> Conduit Message m ()
+ackMessageC :: (Monad m, MonadAWS m) => String -> Conduit [Message] m ()
 ackMessageC sqsUrl =
-  mapMC $ \msg -> do
-    let receipts = msg ^. mReceiptHandle
-
-    forM_ receipts $ \receipt -> do
-      let dm = deleteMessage (T.pack sqsUrl) receipt
-      void $ send dm
+  mapMC $ \msgs -> do
+    let receipts = catMaybes $ msgs ^.. each . mReceiptHandle
+    -- each dmbr needs an ID. just use the list index.
+    let dmbres = uncurry (\r i -> deleteMessageBatchRequestEntry (T.pack (show i)) r) <$> zip receipts [0..]
+    void $ send $ deleteMessageBatch (T.pack sqsUrl) & dmbEntries .~ dmbres
 
 parserCmdSqsToKafka :: Parser CmdSqsToKafka
 parserCmdSqsToKafka = CmdSqsToKafka
