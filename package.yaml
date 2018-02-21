@@ -73,7 +73,6 @@ library:
   - -Wredundant-constraints
   exposed-modules:
   - App
-  - App.Action.KafkaToSqs
   - App.Application
   - App.AppError
   - App.AppEnv
