@@ -15,6 +15,7 @@ import App.RunApplication
 import Arbor.Logger
 import Conduit
 import Control.Arrow                        (left)
+import Control.Concurrent                   (threadDelay)
 import Control.Exception
 import Control.Lens
 import Control.Monad.Except
@@ -28,12 +29,14 @@ import HaskellWorks.Data.Conduit.Combinator
 import Kafka.Avro
 import Kafka.Conduit.Sink
 import Kafka.Conduit.Source
+import Network.AWS
 import Network.StatsD                       as S
 import Options.Applicative
 
 import qualified Data.Avro.Decode  as A
 import qualified Data.Avro.Schema  as A
 import qualified Data.Avro.Types   as A
+import qualified Data.Conduit      as C
 import qualified Data.Conduit.List as L
 import qualified Data.Text         as T
 
@@ -41,6 +44,7 @@ data CmdKafkaToSqs = CmdKafkaToSqs
   { _optInputTopic            :: TopicName
   , _consumerGroupId          :: ConsumerGroupId
   , _outputSqsUrl             :: String
+  , _outputMaxQueuedMessages  :: Int
   , _cmdKafkaToSqsKafkaConfig :: KafkaConfig
   } deriving (Show, Eq)
 
@@ -56,10 +60,14 @@ parserCmdKafkaToSqs = CmdKafkaToSqs
         (  long "kafka-group-id"
         <> metavar "GROUP_ID"
         <> help "Kafka consumer group id"))
-  <*>  strOption
+  <*> strOption
         (  long "output-sqs-url"
         <> metavar "OUTPUT_SQS_URL"
         <> help "Kafka consumer group id")
+  <*> readOption
+        (  long "output-max-queued-messages"
+        <> metavar "NUM_MESSAGES"
+        <> help "Max number of messages in output queue before backpressure is applied")
   <*> kafkaConfigParser
 
 instance HasKafkaConfig (GlobalOptions CmdKafkaToSqs) where
@@ -88,6 +96,35 @@ instance RunApplication CmdKafkaToSqs where
       .| everyNSeconds (kafkaConf ^. commitPeriodSec)  -- only commit ever N seconds, so we don't hammer Kafka.
       .| commitOffsetsSink consumer
 
+sendSqsC :: (MonadAWS m, MonadResource m)
+  => T.Text
+  -> Conduit (A.Value A.Type) m ()
+sendSqsC queueUrl = mapMC $ sendSqs queueUrl . T.pack . C8.unpack . toStrict . J.encode
+
+transmitOneC :: Monad m => Conduit a m a
+transmitOneC = do
+  ma <- C.await
+  case ma of
+    Just a  -> yield a
+    Nothing -> return ()
+
+backPressure :: (MonadAWS m, MonadResource m, MonadLogger m) => T.Text -> Int -> Conduit a m a
+backPressure queueUrl maxMessages = go 0
+  where go n = if n > 0
+          then do
+            transmitOneC
+            go 0
+          else do
+            maybeNumMessages <- getSqsQueueAttributes queueUrl
+            case maybeNumMessages of
+              Just numMessages -> if numMessages > maxMessages
+                then do
+                  liftIO $ threadDelay 1000000
+                  logInfo $ "Queue " ++ show queueUrl ++ " is full"
+                  go 0
+                else go (numMessages - maxMessages)
+              Nothing -> logWarn $ "Could not get queue attributes for queueUrl " ++ show queueUrl
+
 -- | Handles the stream of incoming messages.
 -- Emit values downstream because offsets are committed based on their present.
 handleStream  :: MonadApp CmdKafkaToSqs m
@@ -99,7 +136,10 @@ handleStream opt sr =
   .| L.catMaybes               -- discard empty values
   .| mapMC (decodeMessage sr)  -- decode avro message.
   .| mapC failBadly            -- error on decode failure
-  .| mapMC (sendSqs (T.pack (opt ^. optCmd ^. outputSqsUrl)) . T.pack . C8.unpack . toStrict . J.encode)
+  .| backPressure queueUrl maxMessages
+  .| sendSqsC queueUrl
+  where queueUrl    = T.pack (opt ^. optCmd ^. outputSqsUrl)
+        maxMessages = opt ^. optCmd ^. outputMaxQueuedMessages
 
 asExceptT :: Monad m => (e -> e') -> m (Either e a) -> ExceptT e' m a
 asExceptT f me = ExceptT $ left f <$> me
