@@ -18,23 +18,23 @@ decodeSqsMessage sqsMessage = do
   -- level 1
   outermost <- sqsMessage ^. mBody
   let sqsJSON = fromStrict $ C8.pack $ T.unpack outermost
-  sqs <- decode sqsJSON
+  decodedSqs <- decode sqsJSON
   -- level 2
-  messageJSON <- sqs ^. key "Message"
-  message <- decode $ fromStrict $ C8.pack messageJSON
+  msgJson <- decodedSqs ^. key "Message"
+  msg <- decode $ fromStrict $ C8.pack msgJson
 
   -- from atlasdos-submissions-balancer
 
   -- just 1 record in each sqs event
-  record     <- message    ^. key "Records" . nth 0
-  bucket     <- record     ^. key "s3"     ^. key "bucket"
-  objectAws  <- record     ^. key "s3"     ^. key "object"
+  record     <- msg       ^. key "Records" . nth 0
+  bucket     <- record    ^. key "s3"     ^. key "bucket"
+  objectAws  <- record    ^. key "s3"     ^. key "object"
 
-  eventName  <- record     ^. key "eventName"
-  eventTime  <- record     ^. key "eventTime"
-  bucketName <- bucket     ^. key "name"
-  objectKey  <- objectAws  ^. key "key"
-  objectSize <- objectAws  ^. key "size"
+  eventName  <- record    ^. key "eventName"
+  eventTime  <- record    ^. key "eventTime"
+  bucketName <- bucket    ^. key "name"
+  objectKey  <- objectAws ^. key "key"
+  objectSize <- objectAws ^. key "size"
   -- there is `eTag` field in ObjectCreated:Putevent and no such field in ObjectCreated:Copy
   let objectTag = fromMaybe "" (objectAws  ^. key "eTag")
 

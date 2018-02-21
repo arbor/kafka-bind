@@ -69,7 +69,7 @@ instance RunApplication CmdSqsToKafka where
       .| sinkNull
     return ()
 
-receiveMessageC :: (Monad m, MonadAWS m) => String -> Source m Message
+receiveMessageC :: MonadAWS m => String -> Source m Message
 receiveMessageC sqsUrl = do
   let rm = receiveMessage (T.pack sqsUrl)
   rmr <- send (rm & (rmMaxNumberOfMessages .~ Just 10))
@@ -77,8 +77,8 @@ receiveMessageC sqsUrl = do
   receiveMessageC sqsUrl
 
 handleMessage :: (MonadIO m, MonadLogger m, MonadError AppError m) => SchemaRegistry -> TopicName -> KafkaProducer -> Message -> m ()
-handleMessage sr t@(TopicName topic) producer message = do
-  fcm <- decodeSqsMessage message & note (AppErr "Unable to decode SQS message") & eitherToError
+handleMessage sr t@(TopicName topic) producer msg = do
+  fcm <- decodeSqsMessage msg & note (AppErr "Unable to decode SQS message") & eitherToError
   payload <- encodeValue sr (Subject (T.pack topic)) fcm <&> left EncodeErr >>= eitherToError
   let p = ProducerRecord t UnassignedPartition Nothing (Just (LBS.toStrict payload))
   void $ produceMessage producer p

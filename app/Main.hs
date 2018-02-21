@@ -11,17 +11,16 @@ import App.RunApplication
 import Arbor.Logger
 import Control.Lens
 import Data.Semigroup             ((<>))
-import Kafka.Conduit.Source
 import Network.AWS.Env
 import Network.StatsD             as S
 import System.Environment
 
 import qualified Data.Text as T
 
-mkAppEnv :: RunApplication c => StatsClient -> Logger -> Env -> GlobalOptions c -> c -> AppEnv c
-mkAppEnv stats logger envAws opt cmd =
+mkAppEnv :: StatsClient -> Logger -> Env -> GlobalOptions c -> c -> AppEnv c
+mkAppEnv stats lgr envAws opt cmd =
   let newOpt = opt { _optCmd = cmd }
-      envApp = AppEnv newOpt envAws stats logger
+      envApp = AppEnv newOpt envAws stats lgr
   in envApp
 
 main :: IO ()
@@ -34,8 +33,7 @@ main = do
   withStdOutTimedFastLogger $ \lgr -> do
     withStatsClient progName statsConf $ \stats -> do
       envAws <- mkEnv (opt ^. optRegion) logLvk lgr
-      let mkAppEnv2 :: RunApplication c => c -> AppEnv c
-          mkAppEnv2 cmd = mkAppEnv stats (Logger lgr logLvk) envAws (opt { _optCmd = cmd }) cmd
+      let mkAppEnv2 cmd = mkAppEnv stats (Logger lgr logLvk) envAws (opt { _optCmd = cmd }) cmd
       res <- case opt ^. optCmd of
         CmdOfCmdKafkaToSqs cmd -> runApplication (mkAppEnv2 cmd)
         CmdOfCmdSqsToKafka cmd -> runApplication (mkAppEnv2 cmd)
