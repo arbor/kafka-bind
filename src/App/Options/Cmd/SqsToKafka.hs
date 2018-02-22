@@ -18,6 +18,7 @@ import Arbor.Logger
 import Conduit
 import Control.Arrow                        (left)
 import Control.Lens
+import Control.Monad                        (when)
 import Control.Monad.Except
 import Data.Either.Combinators
 import Data.Monoid
@@ -98,7 +99,8 @@ handleMessages sr t@(TopicName topic) producer msgs =
 
       _ -> throwError (AppErr "Unable to decode SQS message")
 
-ackMessages :: (Monad m, MonadAWS m) => String -> Conduit [Message] m ()
+
+ackMessages :: (MonadAWS m, MonadError AppError m) => String -> Conduit [Message] m ()
 ackMessages sqsUrl =
   mapMC $ \msgs -> do
     let receipts = DM.catMaybes $ msgs ^.. each . mReceiptHandle
@@ -106,7 +108,13 @@ ackMessages sqsUrl =
     let dmbres = uncurry (\r i -> deleteMessageBatchRequestEntry (T.pack (show i)) r) <$> zip receipts ([0..] :: [Integer])
     case dmbres of
       [] -> return ()
-      _  -> void $ send $ deleteMessageBatch (T.pack sqsUrl) & dmbEntries .~ dmbres
+      _  -> do
+        resp <- send $ deleteMessageBatch (T.pack sqsUrl) & dmbEntries .~ dmbres
+        -- only acceptable if no errors.
+        when (resp ^. dmbrsResponseStatus == 200) $
+          case resp ^. dmbrsFailed of
+            [] -> return ()
+            _  -> throwError (AppErr "deleteMessageBatch error, aborting")
 
 parserCmdSqsToKafka :: Parser CmdSqsToKafka
 parserCmdSqsToKafka = CmdSqsToKafka
