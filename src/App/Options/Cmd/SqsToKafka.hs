@@ -17,7 +17,6 @@ import App.SqsMessage
 import Arbor.Logger
 import Conduit
 import Control.Arrow                        (left)
-import Control.Error.Util
 import Control.Lens
 import Control.Monad.Except
 import Data.Either.Combinators
@@ -83,19 +82,31 @@ receiveMessageC sqsUrl = do
 handleMessages :: (MonadIO m, MonadLogger m, MonadError AppError m) => SchemaRegistry -> TopicName -> KafkaProducer -> [Message] -> m ()
 handleMessages sr t@(TopicName topic) producer msgs =
   forM_ msgs $ \msg -> do
-    fcm <- decodeSqsMessage msg & note (AppErr "Unable to decode SQS message") & eitherToError
-    payload <- encodeValue sr (Subject (T.pack topic)) fcm <&> left EncodeErr >>= eitherToError
-    let p = ProducerRecord t UnassignedPartition Nothing (Just (LBS.toStrict payload))
-    void $ produceMessage producer p
-    logInfo $ "Produced record: " <> show p
+    let sqsMessage = decodeSqsNotification msg
+    logInfo $ "sqs: " <> (show msg)
+
+    case sqsMessage of
+      Just (SqsMessageOfFileChangeMessage fcm) -> do
+        payload <- encodeValue sr (Subject (T.pack topic)) fcm <&> left EncodeErr >>= eitherToError
+        let p = ProducerRecord t UnassignedPartition Nothing (Just (LBS.toStrict payload))
+        void $ produceMessage producer p
+        logInfo $ "Produced record: " <> show p
+
+      Just SqsMessageOfS3TestEvent -> do
+        logInfo "s3:TestEvent found"
+        return ()
+
+      _ -> throwError (AppErr "Unable to decode SQS message")
 
 ackMessages :: (Monad m, MonadAWS m) => String -> Conduit [Message] m ()
 ackMessages sqsUrl =
   mapMC $ \msgs -> do
     let receipts = DM.catMaybes $ msgs ^.. each . mReceiptHandle
     -- each dmbr needs an ID. just use the list index.
-    let dmbres = uncurry (\r i -> deleteMessageBatchRequestEntry (T.pack (show i)) r) <$> zip receipts [0..]
-    void $ send $ deleteMessageBatch (T.pack sqsUrl) & dmbEntries .~ dmbres
+    let dmbres = uncurry (\r i -> deleteMessageBatchRequestEntry (T.pack (show i)) r) <$> zip receipts ([0..] :: [Integer])
+    case dmbres of
+      [] -> return ()
+      _  -> void $ send $ deleteMessageBatch (T.pack sqsUrl) & dmbEntries .~ dmbres
 
 parserCmdSqsToKafka :: Parser CmdSqsToKafka
 parserCmdSqsToKafka = CmdSqsToKafka

@@ -1,5 +1,6 @@
 module App.SqsMessage
-  ( decodeSqsMessage
+  ( decodeSqsNotification
+  , SqsMessage (..)
   ) where
 
 import App.FileChangeMessage
@@ -13,19 +14,40 @@ import Network.AWS.SQS.Types
 import qualified Data.ByteString.Char8 as C8
 import qualified Data.Text             as T
 
-decodeSqsMessage :: Message -> Maybe FileChangeMessage
-decodeSqsMessage sqsMessage = do
+data SqsMessage
+  = SqsMessageOfS3TestEvent
+  | SqsMessageOfFileChangeMessage FileChangeMessage
+  | NoMessage
+
+decodeSqsNotification :: Message -> Maybe SqsMessage
+decodeSqsNotification sqsMessage =
   -- level 1
-  outermost <- sqsMessage ^. mBody
-  let sqsJSON = fromStrict $ C8.pack $ T.unpack outermost
-  decodedSqs <- decode sqsJSON
-  -- level 2
-  msgJson <- decodedSqs ^. key "Message"
-  msg <- decode $ fromStrict $ C8.pack msgJson
+  case sqsMessage ^. mBody of
+    Just outermost -> do
+      let sqsJson = fromStrict $ C8.pack $ T.unpack outermost
+      let decodedSqs = decode sqsJson
 
-  -- from atlasdos-submissions-balancer
+      -- level 2
+      msgJson <- decodedSqs ^. key "Message"
+      let msg = decode $ fromStrict $ C8.pack msgJson :: Maybe Value
 
-  -- just 1 record in each sqs event
+      case msg ^. key "Event" :: Maybe String of
+        -- check if test event
+        Just event ->
+          if event == "s3:TestEvent"
+            then Just SqsMessageOfS3TestEvent
+            else Just NoMessage
+
+        -- otherwise, it's a real message
+        Nothing ->
+          decodeSqsMessage msg
+
+    -- something else
+    Nothing -> Just NoMessage
+
+decodeSqsMessage :: Maybe Value -> Maybe SqsMessage
+decodeSqsMessage msg = do
+   -- just 1 record in each sqs event
   record     <- msg       ^. key "Records" . nth 0
   bucket     <- record    ^. key "s3"     ^. key "bucket"
   objectAws  <- record    ^. key "s3"     ^. key "object"
@@ -36,13 +58,14 @@ decodeSqsMessage sqsMessage = do
   objectKey  <- objectAws ^. key "key"
   objectSize <- objectAws ^. key "size"
   -- there is `eTag` field in ObjectCreated:Putevent and no such field in ObjectCreated:Copy
-  let objectTag = fromMaybe "" (objectAws  ^. key "eTag")
+  let objectTag = fromMaybe "" (objectAws ^. key "eTag")
 
-  return FileChangeMessage
-    { fileChangeMessageEventName  = eventName
-    , fileChangeMessageEventTime  = eventTime
-    , fileChangeMessageBucketName = bucketName
-    , fileChangeMessageObjectKey  = objectKey
-    , fileChangeMessageObjectSize = objectSize
-    , fileChangeMessageObjectTag  = objectTag
-    }
+  return $ SqsMessageOfFileChangeMessage $
+    FileChangeMessage
+      { fileChangeMessageEventName  = eventName
+      , fileChangeMessageEventTime  = eventTime
+      , fileChangeMessageBucketName = bucketName
+      , fileChangeMessageObjectKey  = objectKey
+      , fileChangeMessageObjectSize = objectSize
+      , fileChangeMessageObjectTag  = objectTag
+      }
