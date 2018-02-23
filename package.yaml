@@ -34,6 +34,7 @@ dependencies:
 - base >=4.7 && <5
 - amazonka
 - amazonka-core
+- amazonka-sqs
 - amazonka-s3
 - avro
 - bifunctors
@@ -94,7 +95,6 @@ library:
   dependencies:
   - aeson
   - aeson-lens
-  - amazonka-sqs
   - conduit-extra
   - http-types
   - optparse-applicative
@@ -147,6 +147,9 @@ tests:
     - kafka-bind
     - hspec
     - hedgehog
+    - hw-hedgehog
+    - hw-hspec-hedgehog
+    - raw-strings-qq
     when:
     - condition: os(osx)
       cpp-options:
