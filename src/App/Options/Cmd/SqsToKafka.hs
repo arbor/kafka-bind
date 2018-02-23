@@ -84,7 +84,6 @@ handleMessages :: (MonadIO m, MonadLogger m, MonadError AppError m) => SchemaReg
 handleMessages sr t@(TopicName topic) producer msgs =
   forM_ msgs $ \msg -> do
     let sqsMessage = decodeSqsNotification msg
-    logInfo $ "sqs: " <> (show msg)
 
     case sqsMessage of
       Just (SqsMessageOfFileChangeMessage fcm) -> do
@@ -105,7 +104,7 @@ ackMessages sqsUrl =
   mapMC $ \msgs -> do
     let receipts = DM.catMaybes $ msgs ^.. each . mReceiptHandle
     -- each dmbr needs an ID. just use the list index.
-    let dmbres = uncurry (\r i -> deleteMessageBatchRequestEntry (T.pack (show i)) r) <$> zip receipts ([0..] :: [Integer])
+    let dmbres = (\(r, i) -> deleteMessageBatchRequestEntry (T.pack (show i)) r) <$> zip receipts ([0..] :: [Int])
     case dmbres of
       [] -> return ()
       _  -> do

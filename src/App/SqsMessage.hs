@@ -60,7 +60,7 @@ decodeSqsMessage msg = do
   -- there is `eTag` field in ObjectCreated:Putevent and no such field in ObjectCreated:Copy
   let objectTag = fromMaybe "" (objectAws ^. key "eTag")
 
-  return $ SqsMessageOfFileChangeMessage $
+  return $ SqsMessageOfFileChangeMessage
     FileChangeMessage
       { fileChangeMessageEventName  = eventName
       , fileChangeMessageEventTime  = eventTime
