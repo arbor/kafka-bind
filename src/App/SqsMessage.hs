@@ -1,5 +1,6 @@
 module App.SqsMessage
   ( decodeSqsNotification
+  , decodeSqsNotificationBody
   , SqsMessage (..)
   ) where
 
@@ -9,7 +10,7 @@ import Data.Aeson
 import Data.Aeson.Lens
 import Data.ByteString.Lazy  (fromStrict)
 import Data.Maybe            (fromMaybe)
-import Network.AWS.SQS.Types
+import Network.AWS.SQS
 
 import qualified Data.ByteString.Char8 as C8
 import qualified Data.Text             as T
@@ -18,32 +19,32 @@ data SqsMessage
   = SqsMessageOfS3TestEvent
   | SqsMessageOfFileChangeMessage FileChangeMessage
   | NoMessage
+  deriving (Eq, Show)
 
 decodeSqsNotification :: Message -> Maybe SqsMessage
-decodeSqsNotification sqsMessage =
-  -- level 1
-  case sqsMessage ^. mBody of
-    Just outermost -> do
-      let sqsJson = fromStrict $ C8.pack $ T.unpack outermost
-      let decodedSqs = decode sqsJson
+decodeSqsNotification sqsMessage = case sqsMessage ^. mBody of
+  Just body -> decodeSqsNotificationBody body
+  Nothing   -> Just NoMessage
 
-      -- level 2
-      msgJson <- decodedSqs ^. key "Message"
-      let msg = decode $ fromStrict $ C8.pack msgJson :: Maybe Value
+decodeSqsNotificationBody :: T.Text -> Maybe SqsMessage
+decodeSqsNotificationBody body = do
+    let sqsJson = fromStrict $ C8.pack $ T.unpack body
+    let decodedSqs = decode sqsJson
 
-      case msg ^. key "Event" :: Maybe String of
-        -- check if test event
-        Just event ->
-          if event == "s3:TestEvent"
-            then Just SqsMessageOfS3TestEvent
-            else Just NoMessage
+    -- level 2
+    msgJson <- decodedSqs ^. key "Message"
 
-        -- otherwise, it's a real message
-        Nothing ->
-          decodeSqsMessage msg
+    let msg = decode $ fromStrict $ C8.pack msgJson :: Maybe Value
 
-    -- something else
-    Nothing -> Just NoMessage
+    case msg ^. key "Event" :: Maybe String of
+      -- check if test event
+      Just event ->
+        if event == "s3:TestEvent"
+          then Just SqsMessageOfS3TestEvent
+          else Just NoMessage
+
+      -- otherwise, it's a real message
+      Nothing -> decodeSqsMessage msg
 
 decodeSqsMessage :: Maybe Value -> Maybe SqsMessage
 decodeSqsMessage msg = do
