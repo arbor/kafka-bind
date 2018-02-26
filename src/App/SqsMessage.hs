@@ -57,7 +57,8 @@ decodeSqsMessage msg = do
   eventTime  <- record    ^. key "eventTime"
   bucketName <- bucket    ^. key "name"
   objectKey  <- objectAws ^. key "key"
-  objectSize <- objectAws ^. key "size"
+
+  let objectSize = objectAws ^. key "size" & fromMaybe 0
   -- there is `eTag` field in ObjectCreated:Putevent and no such field in ObjectCreated:Copy
   let objectTag = fromMaybe "" (objectAws ^. key "eTag")
 
