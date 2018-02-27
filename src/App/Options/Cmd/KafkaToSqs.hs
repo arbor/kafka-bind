@@ -119,10 +119,10 @@ backPressure queueUrl maxMessages = go 0
             case maybeNumMessages of
               Just numMessages -> if numMessages > maxMessages
                 then do
-                  liftIO $ threadDelay 1000000
+                  liftIO $ threadDelay 1000000 -- µs
                   logInfo $ "Queue " ++ show queueUrl ++ " is full"
                   go 0
-                else go (numMessages - maxMessages)
+                else go (maxMessages - numMessages)
               Nothing -> logWarn $ "Could not get queue attributes for queueUrl " ++ show queueUrl
 
 -- | Handles the stream of incoming messages.
