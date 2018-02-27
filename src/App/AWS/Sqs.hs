@@ -2,7 +2,7 @@
 
 module App.AWS.Sqs
   ( sendSqs
-  , getSqsQueueAttributes
+  , getSqsApproximateNumberOfMessages
   ) where
 
 import Control.Lens
@@ -23,11 +23,11 @@ sendSqs sqsUrl msgBody = do
   void $ send $ sendMessage sqsUrl msgBody
   return ()
 
-getSqsQueueAttributes
+getSqsApproximateNumberOfMessages
   :: (MonadResource m, MonadAWS m)
   => Text
   -> m (Maybe Int)
-getSqsQueueAttributes sqsUrl = do
+getSqsApproximateNumberOfMessages sqsUrl = do
   resp <- send $ getQueueAttributes sqsUrl & gqaAttributeNames .~ [QANApproximateNumberOfMessages]
 
   return $ resp ^. gqarsAttributes . at QANApproximateNumberOfMessages <&> T.unpack >>= T.readMaybe

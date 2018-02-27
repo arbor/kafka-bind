@@ -81,6 +81,8 @@ instance RunApplication CmdKafkaToSqs where
     opt <- view appOptions
     kafkaConf <- view kafkaConfig
 
+    logDebug "Debug logging enabled"
+
     logInfo "Creating Kafka Consumer"
     consumer <- mkConsumer (opt ^. optCmd ^. consumerGroupId) (opt ^. optCmd ^. optInputTopic)
 
@@ -90,10 +92,12 @@ instance RunApplication CmdKafkaToSqs where
     logInfo "Running Kafka Consumer"
     runConduit $
       kafkaSourceNoClose consumer (kafkaConf ^. pollTimeoutMs)
+      .| effectC (\e -> logDebug $ "Message: " <> show e)
       .| throwLeftSatisfyC KafkaErr isFatal            -- throw any fatal error
       .| skipNonFatalExcept [isPollTimeout]            -- discard any non-fatal except poll timeouts
       .| rightC (handleStream opt sr)              -- handle messages (see Service.hs)
       .| everyNSeconds (kafkaConf ^. commitPeriodSec)  -- only commit ever N seconds, so we don't hammer Kafka.
+      .| effectC (\_ -> logDebug "Committing offsets")
       .| commitOffsetsSink consumer
 
 sendSqsC :: (MonadAWS m, MonadResource m)
@@ -115,15 +119,15 @@ backPressure queueUrl maxMessages = go 0
             transmitOneC
             go 0
           else do
-            maybeNumMessages <- getSqsQueueAttributes queueUrl
+            maybeNumMessages <- getSqsApproximateNumberOfMessages queueUrl
             case maybeNumMessages of
               Just numMessages -> if numMessages > maxMessages
                 then do
                   liftIO $ threadDelay 1000000 -- µs
-                  logInfo $ "Queue " ++ show queueUrl ++ " is full"
+                  logInfo $ "Target queue " <> show queueUrl <> " is full (" <> show numMessages <> " messages)"
                   go 0
                 else go (maxMessages - numMessages)
-              Nothing -> logWarn $ "Could not get queue attributes for queueUrl " ++ show queueUrl
+              Nothing -> logWarn $ "Could not get queue attributes for queueUrl " <> show queueUrl
 
 -- | Handles the stream of incoming messages.
 -- Emit values downstream because offsets are committed based on their present.
@@ -136,7 +140,9 @@ handleStream opt sr =
   .| L.catMaybes               -- discard empty values
   .| mapMC (decodeMessage sr)  -- decode avro message.
   .| mapC failBadly            -- error on decode failure
+  .| effectC (\e -> logDebug $ "SQS message for sending: " <> show e)
   .| backPressure queueUrl maxMessages
+  .| effectC (\e -> logDebug $ "Sending SQS: " <> show e)
   .| sendSqsC queueUrl
   where queueUrl    = T.pack (opt ^. optCmd ^. outputSqsUrl)
         maxMessages = opt ^. optCmd ^. outputMaxQueuedMessages
