@@ -37,8 +37,11 @@ main = do
       res <- case opt ^. optCmd of
         CmdOfCmdKafkaToSqs cmd -> runApplication (mkAppEnv2 cmd)
         CmdOfCmdSqsToKafka cmd -> runApplication (mkAppEnv2 cmd)
+        CmdOfCmdStdinToSqs cmd -> runApplication (mkAppEnv2 cmd)
         cmd                    -> return $ Left (AppErr ("Not implemented: " <> show cmd))
       case res of
         Left err -> pushLogMessage lgr LevelError ("Exiting: " <> show err)
         Right _  -> pure ()
-    pushLogMessage lgr LevelError ("Premature exit, must not happen." :: String)
+    case opt ^. optCmd of
+      CmdOfCmdStdinToSqs _ -> pushLogMessage lgr LevelInfo ("Done." :: String)
+      _                    -> pushLogMessage lgr LevelError ("Premature exit, must not happen." :: String)

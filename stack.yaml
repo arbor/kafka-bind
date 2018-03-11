@@ -14,7 +14,11 @@ packages:
     git: git@github.com:haskell-works/hw-hedgehog.git
     commit: 0fd750bbbf733045027e1bc4a61f2b0df63591c7
   extra-dep: true
-
+- location:
+    git: git@github.com:haskell-works/hw-aeson.git
+    commit: d14340364f9a27f84f5009c390a379815849dec2
+  extra-dep: true
+  
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)
 extra-deps:
