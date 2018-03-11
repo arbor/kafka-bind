@@ -30,15 +30,17 @@ main = do
   let logLvk    = opt ^. optLogLevel
   let statsConf = opt ^. optStatsConfig
 
-  withStdOutTimedFastLogger $ \lgr -> do
+  withStdOutTimedFastLogger $ \lgr ->
     withStatsClient progName statsConf $ \stats -> do
       envAws <- mkEnv (opt ^. optRegion) logLvk lgr
       let mkAppEnv2 cmd = mkAppEnv stats (Logger lgr logLvk) envAws (opt { _optCmd = cmd }) cmd
       res <- case opt ^. optCmd of
         CmdOfCmdKafkaToSqs cmd -> runApplication (mkAppEnv2 cmd)
         CmdOfCmdSqsToKafka cmd -> runApplication (mkAppEnv2 cmd)
+        CmdOfCmdStdinToSqs cmd -> runApplication (mkAppEnv2 cmd)
         cmd                    -> return $ Left (AppErr ("Not implemented: " <> show cmd))
       case res of
-        Left err -> pushLogMessage lgr LevelError ("Exiting: " <> show err)
+        Left err -> do
+          pushLogMessage lgr LevelError ("Exiting: " <> show err)
+          pushLogMessage lgr LevelError ("Premature exit, must not happen." :: String)
         Right _  -> pure ()
-    pushLogMessage lgr LevelError ("Premature exit, must not happen." :: String)

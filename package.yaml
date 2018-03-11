@@ -50,6 +50,7 @@ dependencies:
 - fast-logger
 - hs-arbor-logger
 - http-client
+- hw-aeson
 - hw-conduit
 - hw-kafka-avro
 - hw-kafka-client
