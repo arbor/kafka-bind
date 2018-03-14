@@ -1,11 +1,12 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 module App.Kafka
-( ConsumerGroupSuffix(..), TopicName(..)
-, KafkaConsumer, KafkaProducer, Timeout(..)
-, mkConsumer
-, mkProducer
-)
-where
+  ( ConsumerGroupSuffix(..), TopicName(..)
+  , KafkaConsumer, KafkaProducer, Timeout(..)
+  , mkConsumer
+  , mkProducer
+  , unPartitionId
+  , unOffset
+  ) where
 
 import App.AppEnv
 import App.Options
@@ -16,6 +17,7 @@ import Control.Monad.Logger         (LogLevel (..))
 import Control.Monad.Reader
 import Control.Monad.Trans.Resource
 import Data.Foldable
+import Data.Int
 import Data.List.Split
 import Data.Monoid                  ((<>))
 import Kafka.Conduit.Sink           as KSnk
@@ -107,3 +109,9 @@ kafkaDebugEnable str = map debug (splitWhen (== ',') str)
       "feature"  -> DebugFeature
       "all"      -> DebugAll
       _          -> DebugGeneric
+
+unPartitionId :: PartitionId -> Int
+unPartitionId (PartitionId p) = p
+
+unOffset :: Offset -> Int64
+unOffset (Offset o) = o
