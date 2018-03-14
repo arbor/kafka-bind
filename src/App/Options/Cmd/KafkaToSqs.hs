@@ -93,10 +93,17 @@ instance RunApplication CmdKafkaToSqs where
     runConduit $
       kafkaSourceNoClose consumer (kafkaConf ^. pollTimeoutMs)
       .| effectC (\e -> logDebug $ "Message: " <> show e)
-      .| throwLeftSatisfyC KafkaErr isFatal            -- throw any fatal error
-      .| skipNonFatalExcept [isPollTimeout]            -- discard any non-fatal except poll timeouts
-      .| rightC (handleStream opt sr)              -- handle messages (see Service.hs)
-      .| everyNSeconds (kafkaConf ^. commitPeriodSec)  -- only commit ever N seconds, so we don't hammer Kafka.
+      .| throwLeftSatisfyC KafkaErr isFatal             -- throw any fatal error
+      .| skipNonFatalExcept [isPollTimeout]             -- discard any non-fatal except poll timeouts
+      .| effectC (\case
+        Left y -> do
+          logDebug $ "Error polling message: " <> show y
+          return Nothing
+        Right cr -> do
+          logDebug $ "Polled message: " <> show (unPartitionId (crPartition cr)) <> ":" <> show (unOffset (crOffset cr))
+          return $ Just cr)
+      .| rightC (handleStream opt sr)                   -- handle messages (see Service.hs)
+      .| everyNSeconds (kafkaConf ^. commitPeriodSec)   -- only commit ever N seconds, so we don't hammer Kafka.
       .| effectC (\_ -> logDebug "Committing offsets")
       .| commitOffsetsSink consumer
 
