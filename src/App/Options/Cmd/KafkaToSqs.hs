@@ -114,9 +114,12 @@ onRebalance :: TimedFastLogger -> StatsClient -> RebalanceEvent -> IO ()
 onRebalance lgr stats e = case e of
   RebalanceBeforeAssign ps -> do
     pushLogMessage lgr LevelInfo $ "Rebalancing, partitions to assign: " <> show (snd <$> ps)
+    sendEvt stats $ event "Rebalanced" $ "Job is finalising a rebalancing event.  Assigned partitions: "
+        <> " " <> T.intercalate "," (T.pack . show . unPartitionId . snd <$> ps)
   RebalanceRevoke ps -> do
     pushLogMessage lgr LevelInfo $ "Rebalancing, partitions revoked: " <> show (snd <$> ps)
-    sendEvt stats $ event "Rebalanced" "Job has received a rebalancing event"
+    sendEvt stats $ event "Rebalancing" $ "Job has received a rebalancing event.  Revoked partitions: "
+        <> " " <> T.intercalate "," (T.pack . show . unPartitionId . snd <$> ps)
   _ -> pure ()
 
 sendSqsC :: (MonadAWS m, MonadResource m)
