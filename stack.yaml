@@ -4,7 +4,7 @@ packages:
 - '.'
 - location:
     git: git@github.com:packetloop/datadog.git
-    commit: d7c5b246e02677596ca03bf699c490d0c4470066
+    commit: 74c4ef963d7d455ecaed5de4c53249776abdf8e9
   extra-dep: true
 - location:
     git: git@github.com:packetloop/hs-arbor-logger.git
