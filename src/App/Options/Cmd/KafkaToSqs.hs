@@ -78,13 +78,16 @@ instance HasKafkaConfig (AppEnv CmdKafkaToSqs) where
 
 instance RunApplication CmdKafkaToSqs where
   runApplication envApp = runApplicationM envApp $ do
-    opt <- view appOptions
+    opt       <- view appOptions
     kafkaConf <- view kafkaConfig
+    env       <- view appEnv
+    let lgr   = env ^. appLogger . lgLogger
+    let stats = env ^. appStatsClient
 
     logDebug "Debug logging enabled"
 
     logInfo "Creating Kafka Consumer"
-    consumer <- mkConsumer (opt ^. optCmd ^. consumerGroupId) (opt ^. optCmd ^. optInputTopic)
+    consumer <- mkConsumer (opt ^. optCmd ^. consumerGroupId) (opt ^. optCmd ^. optInputTopic) (onRebalance lgr stats)
 
     logInfo "Instantiating Schema Registry"
     sr <- schemaRegistry (kafkaConf ^. schemaRegistryAddress)
@@ -106,6 +109,16 @@ instance RunApplication CmdKafkaToSqs where
       .| everyNSeconds (kafkaConf ^. commitPeriodSec)   -- only commit ever N seconds, so we don't hammer Kafka.
       .| effectC (\_ -> logDebug "Committing offsets")
       .| commitOffsetsSink consumer
+
+onRebalance :: TimedFastLogger -> StatsClient -> RebalanceEvent -> IO ()
+onRebalance lgr stats e = case e of
+  RebalanceBeforeAssign ps -> do
+    pushLogMessage lgr LevelInfo $ "Rebalancing, partitions to assign: " <> show (snd <$> ps)
+    pushLogMessage lgr LevelInfo ("Prefetcher channels has been cleaned" :: String)
+  RebalanceRevoke ps -> do
+    pushLogMessage lgr LevelInfo $ "Rebalancing, partitions revoked: " <> show (snd <$> ps)
+    sendEvt stats $ event "Unifier rebalanced" "Unifier has received a rebalancing event"
+  _ -> pure ()
 
 sendSqsC :: (MonadAWS m, MonadResource m)
   => T.Text
