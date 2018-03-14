@@ -21,7 +21,6 @@ import Control.Lens
 import Control.Monad.Except
 import Data.Aeson                           as J
 import Data.ByteString                      (ByteString)
-import Data.ByteString.Char8                as C8
 import Data.ByteString.Lazy                 (fromStrict, toStrict)
 import Data.Maybe                           (catMaybes)
 import Data.Monoid
@@ -33,12 +32,13 @@ import Network.AWS
 import Network.StatsD                       as S
 import Options.Applicative
 
-import qualified Data.Avro.Decode  as A
-import qualified Data.Avro.Schema  as A
-import qualified Data.Avro.Types   as A
-import qualified Data.Conduit      as C
-import qualified Data.Conduit.List as L
-import qualified Data.Text         as T
+import qualified Data.Avro.Decode      as A
+import qualified Data.Avro.Schema      as A
+import qualified Data.Avro.Types       as A
+import qualified Data.ByteString.Char8 as C8
+import qualified Data.Conduit          as C
+import qualified Data.Conduit.List     as L
+import qualified Data.Text             as T
 
 data CmdKafkaToSqs = CmdKafkaToSqs
   { _optInputTopic            :: TopicName
@@ -113,13 +113,13 @@ instance RunApplication CmdKafkaToSqs where
 onRebalance :: TimedFastLogger -> StatsClient -> RebalanceEvent -> IO ()
 onRebalance lgr stats e = case e of
   RebalanceBeforeAssign ps -> do
-    pushLogMessage lgr LevelInfo $ "Rebalancing, partitions to assign: " <> show (snd <$> ps)
-    sendEvt stats $ event "Rebalanced" $ "Job is finalising a rebalancing event.  Assigned partitions: "
-        <> " " <> T.intercalate "," (T.pack . show . unPartitionId . snd <$> ps)
+    let partitionsText = "Partitions assigned:" <> T.intercalate "," (T.pack . show . unPartitionId . snd <$> ps)
+    pushLogMessage lgr LevelInfo $ "Rebalanced. " <> partitionsText
+    sendEvt stats $ event "Rebalanced" partitionsText
   RebalanceRevoke ps -> do
-    pushLogMessage lgr LevelInfo $ "Rebalancing, partitions revoked: " <> show (snd <$> ps)
-    sendEvt stats $ event "Rebalancing" $ "Job has received a rebalancing event.  Revoked partitions: "
-        <> " " <> T.intercalate "," (T.pack . show . unPartitionId . snd <$> ps)
+    let partitionsText = "Partitions revoked:" <> T.intercalate "," (T.pack . show . unPartitionId . snd <$> ps)
+    pushLogMessage lgr LevelInfo $ "Rebalancing. " <> partitionsText
+    sendEvt stats $ event "Rebalancing" partitionsText
   _ -> pure ()
 
 sendSqsC :: (MonadAWS m, MonadResource m)
