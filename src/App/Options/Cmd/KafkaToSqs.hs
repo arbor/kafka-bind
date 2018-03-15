@@ -26,10 +26,9 @@ import Data.Maybe                           (catMaybes)
 import Data.Monoid
 import HaskellWorks.Data.Conduit.Combinator
 import Kafka.Avro
-import Kafka.Conduit.Sink
 import Kafka.Conduit.Source
 import Network.AWS
-import Network.StatsD                       as S
+import Network.StatsD                       (DogStatsSettings (..), MetricName (..), StatsClient, Tag, closeStatsClient, createStatsClient, envTag, event, sendEvt)
 import Options.Applicative
 
 import qualified Data.Avro.Decode      as A
@@ -39,6 +38,7 @@ import qualified Data.ByteString.Char8 as C8
 import qualified Data.Conduit          as C
 import qualified Data.Conduit.List     as L
 import qualified Data.Text             as T
+import qualified Network.StatsD        as S
 
 data CmdKafkaToSqs = CmdKafkaToSqs
   { _optInputTopic            :: TopicName
@@ -108,7 +108,8 @@ instance RunApplication CmdKafkaToSqs where
       .| rightC (handleStream opt sr)                   -- handle messages (see Service.hs)
       .| everyNSeconds (kafkaConf ^. commitPeriodSec)   -- only commit ever N seconds, so we don't hammer Kafka.
       .| effectC (\_ -> logDebug "Committing offsets")
-      .| commitOffsetsSink consumer
+      .| effectC' (commitAllOffsets OffsetCommit consumer)
+      .| sinkNull
 
 onRebalance :: TimedFastLogger -> StatsClient -> RebalanceEvent -> IO ()
 onRebalance lgr stats e = case e of
