@@ -113,12 +113,12 @@ instance RunApplication CmdKafkaToSqs where
 onRebalance :: TimedFastLogger -> StatsClient -> RebalanceEvent -> IO ()
 onRebalance lgr stats e = case e of
   RebalanceBeforeAssign ps -> do
-    let partitionsText = "Partitions assigned:" <> T.intercalate "," (T.pack . show . unPartitionId . snd <$> ps)
-    pushLogMessage lgr LevelInfo $ "Rebalanced. " <> partitionsText
+    let partitionsText = "Partitions assigned: " <> T.pack (show (unPartitionId . snd <$> ps))
+    pushLogMessage lgr LevelInfo $ "kafka-to-sqs: Rebalanced. " <> partitionsText
     sendEvt stats $ event "Rebalanced" partitionsText
   RebalanceRevoke ps -> do
-    let partitionsText = "Partitions revoked:" <> T.intercalate "," (T.pack . show . unPartitionId . snd <$> ps)
-    pushLogMessage lgr LevelInfo $ "Rebalancing. " <> partitionsText
+    let partitionsText = "Partitions revoked: " <> T.pack (show (unPartitionId . snd <$> ps))
+    pushLogMessage lgr LevelInfo $ "kafka-to-sqs: Rebalancing. " <> partitionsText
     sendEvt stats $ event "Rebalancing" partitionsText
   _ -> pure ()
 
