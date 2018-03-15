@@ -30,7 +30,7 @@ newtype ConsumerGroupSuffix = ConsumerGroupSuffix String deriving (Show, Eq)
 mkConsumer :: (MonadResource m, MonadReader r m, HasKafkaConfig r, HasLogger r)
             => ConsumerGroupId
             -> TopicName
-            -> (RebalanceEvent -> IO ())
+            -> (KafkaConsumer -> RebalanceEvent -> IO ())
             -> m KafkaConsumer
 mkConsumer cgid topic onRebalance = do
   conf <- view kafkaConfig
@@ -45,7 +45,7 @@ mkConsumer cgid topic onRebalance = do
         , KSrc.debugOptions (kafkaDebugEnable (conf ^. debugOpts))
         , KSrc.setCallback (logCallback   (\l s1 s2 -> pushLogMessage (logs ^. lgLogger) (kafkaLogLevelToLogLevel $ toEnum l) ("[" <> s1 <> "] " <> s2)))
         , KSrc.setCallback (errorCallback (\e s -> pushLogMessage (logs ^. lgLogger) LevelError ("[" <> show e <> "] " <> s)))
-        , KSrc.setCallback (rebalanceCallback (\_ e -> onRebalance e))
+        , KSrc.setCallback (rebalanceCallback onRebalance)
         ]
       sub = topics [topic] <> offsetReset Earliest
       cons = newConsumer props sub >>= either throwM return

@@ -20,5 +20,5 @@ instance Exception AppError
 throwErrorAs :: MonadError e' m => (e -> e') -> Either e a -> m a
 throwErrorAs f = either (throwError . f) pure
 
-
-
+throwAs' :: MonadThrow m => (e -> AppError) -> Maybe e -> m ()
+throwAs' f = maybe (pure ()) (throwM . f)

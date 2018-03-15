@@ -110,8 +110,19 @@ instance RunApplication CmdKafkaToSqs where
       .| effectC (\_ -> logDebug "Committing offsets")
       .| commitOffsetsSink consumer
 
-onRebalance :: TimedFastLogger -> StatsClient -> RebalanceEvent -> IO ()
-onRebalance lgr stats e = case e of
+seekToCommitted :: MonadIO m => KafkaConsumer -> [(TopicName, PartitionId)] -> m (Maybe KafkaError)
+seekToCommitted k ps = do
+  mcomm <- committed k (Timeout 10000) ps
+  case mcomm of
+    Left err   -> pure (Just err)
+    Right comm -> seek k (Timeout 10000) (updateTP <$> comm)
+  where updateTP tp = case tpOffset tp of
+          PartitionOffset _ -> tp
+          _                 -> tp { tpOffset = PartitionOffsetBeginning }
+
+
+onRebalance :: TimedFastLogger -> StatsClient -> KafkaConsumer -> RebalanceEvent -> IO ()
+onRebalance lgr stats k e = case e of
   RebalanceBeforeAssign ps -> do
     let partitionsText = "Partitions assigned: " <> T.pack (show (unPartitionId . snd <$> ps))
     pushLogMessage lgr LevelInfo $ "kafka-to-sqs: Rebalanced. " <> partitionsText
@@ -120,6 +131,8 @@ onRebalance lgr stats e = case e of
     let partitionsText = "Partitions revoked: " <> T.pack (show (unPartitionId . snd <$> ps))
     pushLogMessage lgr LevelInfo $ "kafka-to-sqs: Rebalancing. " <> partitionsText
     sendEvt stats $ event "Rebalancing" partitionsText
+  RebalanceAssign ps ->
+    seekToCommitted k ps >>= throwAs' KafkaErr
   _ -> pure ()
 
 sendSqsC :: (MonadAWS m, MonadResource m)
