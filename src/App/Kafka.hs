@@ -44,7 +44,7 @@ mkConsumer cgid topic onRebalance = do
         , KSrc.logLevel (kafkaLogLevel (logs ^. lgLogLevel))
         , KSrc.debugOptions (kafkaDebugEnable (conf ^. debugOpts))
         , KSrc.setCallback (logCallback   (\l s1 s2 -> pushLogMessage (logs ^. lgLogger) (kafkaLogLevelToLogLevel $ toEnum l) ("[" <> s1 <> "] " <> s2)))
-        , KSrc.setCallback (errorCallback (\e s -> pushLogMessage (logs ^. lgLogger) LevelError ("[" <> show e <> "] " <> s)))
+        -- , KSrc.setCallback (errorCallback (\e s -> pushLogMessage (logs ^. lgLogger) LevelError ("[" <> show e <> "] " <> s)))
         , KSrc.setCallback (rebalanceCallback (\_ e -> onRebalance e))
         ]
       sub = topics [topic] <> offsetReset Earliest
