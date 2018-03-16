@@ -103,7 +103,7 @@ instance RunApplication CmdKafkaToSqs where
           logDebug $ "Error polling message: " <> show y
           return Nothing
         Right cr -> do
-          logDebug $ "Polled message: " <> show (unPartitionId (crPartition cr)) <> ":" <> show (unOffset (crOffset cr))
+          logInfo $ "Polled message: " <> show (unPartitionId (crPartition cr)) <> ":" <> show (unOffset (crOffset cr))
           return $ Just cr)
       .| rightC (handleStream opt sr)                   -- handle messages (see Service.hs)
       .| everyNSeconds (kafkaConf ^. commitPeriodSec)   -- only commit ever N seconds, so we don't hammer Kafka.
