@@ -16,7 +16,7 @@ packages:
   extra-dep: true
 - location:
     git: git@github.com:packetloop/hw-kafka-client.git
-    commit: a50d8023c6c1fddf0d0149dcfc5cb9675b3165b1
+    commit: c44970eee6c9833c174d34d59f6a2735b041164c
   extra-dep: true
 
 # Dependency packages to be pulled from upstream that are not in the resolver
