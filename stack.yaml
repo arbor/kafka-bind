@@ -14,6 +14,10 @@ packages:
     git: git@github.com:haskell-works/hw-hedgehog.git
     commit: 0fd750bbbf733045027e1bc4a61f2b0df63591c7
   extra-dep: true
+- location:
+    git: git@github.com:packetloop/hw-kafka-client.git
+    commit: a50d8023c6c1fddf0d0149dcfc5cb9675b3165b1
+  extra-dep: true
 
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)
@@ -23,7 +27,7 @@ extra-deps:
   - pure-zlib-0.6
   - hedgehog-0.5.2
   - hw-kafka-avro-1.3.0
-  - hw-kafka-client-2.4.0
+  # - hw-kafka-client-2.4.0
   - hw-kafka-conduit-2.4.0
   - hw-hspec-hedgehog-0.1.0.0
   - hw-conduit-0.2.0.3
