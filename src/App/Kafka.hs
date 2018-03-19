@@ -6,9 +6,11 @@ module App.Kafka
   , mkProducer
   , unPartitionId
   , unOffset
+  , jumpGuard
   ) where
 
 import App.AppEnv
+import App.AppError
 import App.Options
 import Arbor.Logger
 import Control.Lens                 hiding (cons)
@@ -16,6 +18,7 @@ import Control.Monad                (void)
 import Control.Monad.Logger         (LogLevel (..))
 import Control.Monad.Reader
 import Control.Monad.Trans.Resource
+import Data.Conduit
 import Data.Foldable
 import Data.Int
 import Data.List.Split
@@ -117,3 +120,66 @@ unPartitionId (PartitionId p) = p
 
 unOffset :: Offset -> Int64
 unOffset (Offset o) = o
+
+-- Detects sudden offsets jumps in a stream and compensates
+-- by seeking to the expected positions.
+jumpGuard :: (MonadIO m, MonadLogger m, MonadThrow m)
+          => KafkaConsumer
+          -> Conduit (ConsumerRecord k v) m (ConsumerRecord k v)
+jumpGuard consumer = go M.empty
+  where
+    go state = do
+      mmsg <- await
+      case mmsg of
+        Nothing  -> pure () -- stream has exhausted
+        Just msg -> do
+          -- was there a jump? Should we compensate?
+          (mjmp, state') <- compensateJumpPos consumer msg state
+          case mjmp of
+            Nothing -> do
+              --  No jump, great! Yield the message downstream, update  state and recurse
+              let (rt, rp, Offset ro) = (crTopic msg, crPartition msg, crOffset msg)
+              yield msg
+              go (M.insert (rt, rp) (PartitionOffset ro) state')
+            Just pos -> do
+              -- Jump detected! Report it and seek back to a compensating position
+              reportProblem (crTopic msg) (crPartition msg) (crOffset msg) (tpOffset pos)
+              seek consumer (Timeout 10000) [pos] >>= throwAs' KafkaErr
+              go state'
+
+    reportProblem t p srcOffset dstOffset = do
+      let errMsg = "Jump detected for" <> show (t, p) <> ": " <> show srcOffset <> " -> " <> show dstOffset
+      logWarn errMsg
+
+-- | Detects sudden jumps in offsets and provides positions to compensate (seek) if necessary.
+--
+-- Checks current record offset against what has been seen already.
+-- When there is no "seen" offsets for a given patition, latest committed offset is used.
+--
+-- The return is a tuple of:
+-- 1. Optional position to compensate for the jump ('Nothing' if no jump detected).
+-- 2. Updated "seen" positions.
+--
+-- When a compensation position is returned the cunsumer is expected to 'seek' to that
+-- position to compensate for a jump.
+compensateJumpPos :: (MonadIO m, MonadThrow m)
+                  => KafkaConsumer
+                  -> ConsumerRecord k v -- received record
+                  -> M.Map (TopicName, PartitionId) PartitionOffset -- seen offsets (state)
+                  -> m (Maybe TopicPartition, M.Map (TopicName, PartitionId) PartitionOffset)
+                     -- ^ Maybe position to jump to (compensate) + new seen offsets (state)
+compensateJumpPos consumer cr mem = do
+  let (rt, rp, Offset ro) = (crTopic cr, crPartition cr, crOffset cr)
+  let lastPos = M.lookup (rt, rp) mem
+  case lastPos of
+    _                          | ro == 0     -> pure (Nothing, mem) -- 1st record, OK
+    Just (PartitionOffset pos) | ro <= pos+1 -> pure (Nothing, mem) -- expected, OK
+    _ -> do
+      comm <- committed consumer (Timeout 10000) [(rt, rp)] >>= throwAs KafkaErr
+      let mem' = (M.fromList $ tupledTP <$> comm) `M.union` mem
+      case M.lookup (rt, rp) mem' of
+        Just (PartitionOffset pos) | ro <= pos+1 -> pure (Nothing, mem') -- expected, OK
+        Just (PartitionOffset pos) -> pure (Just $ TopicPartition rt rp (PartitionOffset pos), mem')
+        _                          -> pure (Just $ TopicPartition rt rp PartitionOffsetBeginning, mem')
+  where
+    tupledTP tp = ((tpTopicName tp, tpPartition tp), tpOffset tp)

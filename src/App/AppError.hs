@@ -1,9 +1,8 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 module App.AppError
-( module App.AppError
-, Control.Monad.Except.throwError
-)
-where
+  ( module App.AppError
+  , Control.Monad.Except.throwError
+  ) where
 
 import Control.Monad.Catch
 import Control.Monad.Except
@@ -20,5 +19,8 @@ instance Exception AppError
 throwErrorAs :: MonadError e' m => (e -> e') -> Either e a -> m a
 throwErrorAs f = either (throwError . f) pure
 
+throwAs :: MonadThrow m => (e -> AppError) -> Either e a -> m a
+throwAs f = either (throwM . f) pure
 
-
+throwAs' :: MonadThrow m => (e -> AppError) -> Maybe e -> m ()
+throwAs' f = maybe (pure ()) (throwM . f)

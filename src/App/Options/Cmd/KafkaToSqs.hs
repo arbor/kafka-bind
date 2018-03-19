@@ -98,16 +98,20 @@ instance RunApplication CmdKafkaToSqs where
       .| effectC (\e -> logDebug $ "Message: " <> show e)
       .| throwLeftSatisfyC KafkaErr isFatal             -- throw any fatal error
       .| skipNonFatalExcept [isPollTimeout]             -- discard any non-fatal except poll timeouts
+      .| rightC (jumpGuard consumer)
       .| effectC (\case
         Left y -> do
           logDebug $ "Error polling message: " <> show y
           return Nothing
         Right cr -> do
-          logDebug $ "Polled message: " <> show (unPartitionId (crPartition cr)) <> ":" <> show (unOffset (crOffset cr))
+          logInfo $ "Polled message: " <> show (unPartitionId (crPartition cr)) <> ":" <> show (unOffset (crOffset cr))
+          processedMessages += 1
           return $ Just cr)
       .| rightC (handleStream opt sr)                   -- handle messages (see Service.hs)
       .| everyNSeconds (kafkaConf ^. commitPeriodSec)   -- only commit ever N seconds, so we don't hammer Kafka.
-      .| effectC (\_ -> logDebug "Committing offsets")
+      .| effectC (\_ -> do
+          n <- use processedMessages
+          logInfo $ "Committing offsets.  Messages processed: " <> show n)
       .| commitOffsetsSink consumer
 
 onRebalance :: TimedFastLogger -> StatsClient -> RebalanceEvent -> IO ()

@@ -1,7 +1,17 @@
-module App.AppState
-where
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE TemplateHaskell        #-}
 
-data AppState = AppState {} deriving Show
+module App.AppState where
+
+import Control.Lens
+
+newtype AppState = AppState
+  { _appStateProcessedMessages :: Int
+  } deriving Show
 
 appStateEmpty :: AppState
-appStateEmpty = AppState {}
+appStateEmpty = AppState
+  { _appStateProcessedMessages = 0
+  }
+
+makeFields ''AppState
