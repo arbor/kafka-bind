@@ -1,4 +1,4 @@
-resolver: lts-10.5
+resolver: lts-10.9
 
 packages:
 - '.'
@@ -23,8 +23,8 @@ extra-deps:
   - pure-zlib-0.6
   - hedgehog-0.5.2
   - hw-kafka-avro-1.3.0
-  - hw-kafka-client-2.3.1
-  - hw-kafka-conduit-2.0.0
+  - hw-kafka-client-2.4.1
+  - hw-kafka-conduit-2.4.0
   - hw-hspec-hedgehog-0.1.0.0
   - hw-conduit-0.2.0.3
 
