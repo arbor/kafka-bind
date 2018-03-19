@@ -26,7 +26,6 @@ import Data.Maybe                           (catMaybes)
 import Data.Monoid
 import HaskellWorks.Data.Conduit.Combinator
 import Kafka.Avro
-import Kafka.Conduit.Sink
 import Kafka.Conduit.Source
 import Network.AWS
 import Network.StatsD                       as S
@@ -109,10 +108,11 @@ instance RunApplication CmdKafkaToSqs where
           return $ Just cr)
       .| rightC (handleStream opt sr)                   -- handle messages (see Service.hs)
       .| everyNSeconds (kafkaConf ^. commitPeriodSec)   -- only commit ever N seconds, so we don't hammer Kafka.
-      .| effectC (\_ -> do
+      .| effectC' (do
           n <- use processedMessages
           logInfo $ "Committing offsets.  Messages processed: " <> show n)
-      .| commitOffsetsSink consumer
+      .| effectC' (commitAllOffsets OffsetCommit consumer)
+      .| sinkNull
 
 onRebalance :: TimedFastLogger -> StatsClient -> RebalanceEvent -> IO ()
 onRebalance lgr stats e = case e of
