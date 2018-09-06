@@ -103,7 +103,7 @@ instance RunApplication CmdKafkaToSqs where
           logDebug $ "Error polling message: " <> show y
           return Nothing
         Right cr -> do
-          logInfo $ "Polled message: " <> show (unPartitionId (crPartition cr)) <> ":" <> show (unOffset (crOffset cr))
+          logDebug $ "Polled message: " <> show (unPartitionId (crPartition cr)) <> ":" <> show (unOffset (crOffset cr))
           processedMessages += 1
           return $ Just cr)
       .| rightC (handleStream opt sr)                   -- handle messages (see Service.hs)
