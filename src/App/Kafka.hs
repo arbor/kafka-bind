@@ -1,7 +1,8 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
+
 module App.Kafka
-  ( ConsumerGroupSuffix(..), TopicName(..)
-  , KafkaConsumer, KafkaProducer, Timeout(..)
+  ( ConsumerGroupSuffix(..), K.TopicName(..)
+  , K.KafkaConsumer, K.KafkaProducer, K.Timeout(..)
   , mkConsumer
   , mkProducer
   , unPartitionId
@@ -23,109 +24,111 @@ import Data.Foldable
 import Data.Int
 import Data.List.Split
 import Data.Monoid                  ((<>))
-import Kafka.Conduit.Sink           as KSnk
-import Kafka.Conduit.Source         as KSrc
 
-import qualified Data.Map as M
+import qualified Data.Map             as M
+import qualified Kafka.Conduit.Sink   as KSnk
+import qualified Kafka.Conduit.Sink   as K
+import qualified Kafka.Conduit.Source as KSrc
+import qualified Kafka.Conduit.Source as K
 
 newtype ConsumerGroupSuffix = ConsumerGroupSuffix String deriving (Show, Eq)
 
 mkConsumer :: (MonadResource m, MonadReader r m, HasKafkaConfig r, HasLogger r)
-            => ConsumerGroupId
-            -> TopicName
-            -> (RebalanceEvent -> IO ())
-            -> m KafkaConsumer
+            => K.ConsumerGroupId
+            -> K.TopicName
+            -> (K.RebalanceEvent -> IO ())
+            -> m K.KafkaConsumer
 mkConsumer cgid topic onRebalance = do
   conf <- view kafkaConfig
   logs <- view logger
   let props = fold
         [ KSrc.brokersList [conf ^. broker]
-        , cgid & groupId
-        , conf ^. queuedMaxMsgKBytes & queuedMaxMessagesKBytes
-        , noAutoCommit
+        , cgid & K.groupId
+        , conf ^. queuedMaxMsgKBytes & K.queuedMaxMessagesKBytes
+        , K.noAutoCommit
         , KSrc.suppressDisconnectLogs
         , KSrc.logLevel (kafkaLogLevel (logs ^. lgLogLevel))
         , KSrc.debugOptions (kafkaDebugEnable (conf ^. debugOpts))
-        , KSrc.setCallback (logCallback   (\l s1 s2 -> pushLogMessage (logs ^. lgLogger) (kafkaLogLevelToLogLevel $ toEnum l) ("[" <> s1 <> "] " <> s2)))
-        , KSrc.setCallback (errorCallback (\e s -> pushLogMessage (logs ^. lgLogger) LevelError ("[" <> show e <> "] " <> s)))
-        , KSrc.setCallback (rebalanceCallback (\_ e -> onRebalance e))
+        , KSrc.setCallback (K.logCallback   (\l s1 s2 -> pushLogMessage (logs ^. lgLogger) (kafkaLogLevelToLogLevel $ toEnum l) ("[" <> s1 <> "] " <> s2)))
+        , KSrc.setCallback (K.errorCallback (\e s -> pushLogMessage (logs ^. lgLogger) LevelError ("[" <> show e <> "] " <> s)))
+        , KSrc.setCallback (K.rebalanceCallback (\_ e -> onRebalance e))
         ]
-      sub = topics [topic] <> offsetReset Earliest
-      cons = newConsumer props sub >>= either throwM return
-  snd <$> allocate cons (void . closeConsumer)
+      sub = K.topics [topic] <> K.offsetReset K.Earliest
+      cons = K.newConsumer props sub >>= either throwM return
+  snd <$> allocate cons (void . K.closeConsumer)
 
-mkProducer :: (MonadResource m, MonadReader r m, HasKafkaConfig r, HasLogger r) => m KafkaProducer
+mkProducer :: (MonadResource m, MonadReader r m, HasKafkaConfig r, HasLogger r) => m K.KafkaProducer
 mkProducer = do
   conf <- view kafkaConfig
   logs <- view logger
   let props = KSnk.brokersList [conf ^. broker]
            <> KSnk.suppressDisconnectLogs
-           <> KSnk.sendTimeout (Timeout 0) -- message sending timeout, 0 means "no timeout"
+           <> KSnk.sendTimeout (K.Timeout 0) -- message sending timeout, 0 means "no timeout"
            <> KSnk.logLevel (kafkaLogLevel (logs ^. lgLogLevel))
-           <> KSnk.setCallback (logCallback   (\l s1 s2 -> pushLogMessage (logs ^. lgLogger) (kafkaLogLevelToLogLevel $ toEnum l) ("[" <> s1 <> "] " <> s2)))
-           <> KSnk.setCallback (errorCallback (\e s -> pushLogMessage (logs ^. lgLogger) LevelError ("[" <> show e <> "] " <> s)))
-           <> KSnk.setCallback (deliveryErrorsCallback (logAndDieHard (logs ^. lgLogger)))
+           <> KSnk.setCallback (K.logCallback   (\l s1 s2 -> pushLogMessage (logs ^. lgLogger) (kafkaLogLevelToLogLevel $ toEnum l) ("[" <> s1 <> "] " <> s2)))
+           <> KSnk.setCallback (K.errorCallback (\e s -> pushLogMessage (logs ^. lgLogger) LevelError ("[" <> show e <> "] " <> s)))
+           <> KSnk.setCallback (K.deliveryCallback (logAndDieHard (logs ^. lgLogger)))
            <> KSnk.extraProps (M.singleton "linger.ms"                 "100")
            <> KSnk.extraProps (M.singleton "message.send.max.retries"  "0"  )
-           <> KSnk.compression Gzip
-      prod = newProducer props >>= either throwM return
-  snd <$> allocate prod closeProducer
+           <> KSnk.compression K.Gzip
+      prod = K.newProducer props >>= either throwM return
+  snd <$> allocate prod K.closeProducer
 
-logAndDieHard :: TimedFastLogger -> KafkaError -> IO ()
+logAndDieHard :: TimedFastLogger -> K.DeliveryReport -> IO ()
 logAndDieHard lgr err = do
   let errMsg = "Producer is unable to deliver messages: " <> show err
   pushLogMessage lgr LevelError errMsg
   error errMsg
 
-kafkaLogLevel :: LogLevel -> KafkaLogLevel
+kafkaLogLevel :: LogLevel -> K.KafkaLogLevel
 kafkaLogLevel l = case l of
-  LevelDebug   -> KafkaLogDebug
-  LevelInfo    -> KafkaLogInfo
-  LevelWarn    -> KafkaLogWarning
-  LevelError   -> KafkaLogErr
-  LevelOther _ -> KafkaLogCrit
+  LevelDebug   -> K.KafkaLogDebug
+  LevelInfo    -> K.KafkaLogInfo
+  LevelWarn    -> K.KafkaLogWarning
+  LevelError   -> K.KafkaLogErr
+  LevelOther _ -> K.KafkaLogCrit
 
-kafkaLogLevelToLogLevel :: KafkaLogLevel -> LogLevel
+kafkaLogLevelToLogLevel :: K.KafkaLogLevel -> LogLevel
 kafkaLogLevelToLogLevel l = case l of
-  KafkaLogDebug   -> LevelDebug
-  KafkaLogInfo    -> LevelInfo
-  KafkaLogWarning -> LevelWarn
-  KafkaLogErr     -> LevelError
-  KafkaLogCrit    -> LevelError
-  KafkaLogAlert   -> LevelWarn
-  KafkaLogNotice  -> LevelInfo
-  KafkaLogEmerg   -> LevelError
+  K.KafkaLogDebug   -> LevelDebug
+  K.KafkaLogInfo    -> LevelInfo
+  K.KafkaLogWarning -> LevelWarn
+  K.KafkaLogErr     -> LevelError
+  K.KafkaLogCrit    -> LevelError
+  K.KafkaLogAlert   -> LevelWarn
+  K.KafkaLogNotice  -> LevelInfo
+  K.KafkaLogEmerg   -> LevelError
 
-kafkaDebugEnable :: String -> [KafkaDebug]
+kafkaDebugEnable :: String -> [K.KafkaDebug]
 kafkaDebugEnable str = map debug (splitWhen (== ',') str)
   where
-    debug :: String -> KafkaDebug
+    debug :: String -> K.KafkaDebug
     debug m = case m of
-      "generic"  -> DebugGeneric
-      "broker"   -> DebugBroker
-      "topic"    -> DebugTopic
-      "metadata" -> DebugMetadata
-      "queue"    -> DebugQueue
-      "msg"      -> DebugMsg
-      "protocol" -> DebugProtocol
-      "cgrp"     -> DebugCgrp
-      "security" -> DebugSecurity
-      "fetch"    -> DebugFetch
-      "feature"  -> DebugFeature
-      "all"      -> DebugAll
-      _          -> DebugGeneric
+      "generic"  -> K.DebugGeneric
+      "broker"   -> K.DebugBroker
+      "topic"    -> K.DebugTopic
+      "metadata" -> K.DebugMetadata
+      "queue"    -> K.DebugQueue
+      "msg"      -> K.DebugMsg
+      "protocol" -> K.DebugProtocol
+      "cgrp"     -> K.DebugCgrp
+      "security" -> K.DebugSecurity
+      "fetch"    -> K.DebugFetch
+      "feature"  -> K.DebugFeature
+      "all"      -> K.DebugAll
+      _          -> K.DebugGeneric
 
-unPartitionId :: PartitionId -> Int
-unPartitionId (PartitionId p) = p
+unPartitionId :: K.PartitionId -> Int
+unPartitionId (K.PartitionId p) = p
 
-unOffset :: Offset -> Int64
-unOffset (Offset o) = o
+unOffset :: K.Offset -> Int64
+unOffset (K.Offset o) = o
 
 -- Detects sudden offsets jumps in a stream and compensates
 -- by seeking to the expected positions.
 jumpGuard :: (MonadIO m, MonadLogger m, MonadThrow m)
-          => KafkaConsumer
-          -> Conduit (ConsumerRecord k v) m (ConsumerRecord k v)
+          => K.KafkaConsumer
+          -> ConduitT (K.ConsumerRecord k v) (K.ConsumerRecord k v) m ()
 jumpGuard consumer = go M.empty
   where
     go state = do
@@ -138,13 +141,13 @@ jumpGuard consumer = go M.empty
           case mjmp of
             Nothing -> do
               --  No jump, great! Yield the message downstream, update  state and recurse
-              let (rt, rp, Offset ro) = (crTopic msg, crPartition msg, crOffset msg)
+              let (rt, rp, K.Offset ro) = (K.crTopic msg, K.crPartition msg, K.crOffset msg)
               yield msg
-              go (M.insert (rt, rp) (PartitionOffset ro) state')
+              go (M.insert (rt, rp) (K.PartitionOffset ro) state')
             Just pos -> do
               -- Jump detected! Report it and seek back to a compensating position
-              reportProblem (crTopic msg) (crPartition msg) (crOffset msg) (tpOffset pos)
-              seek consumer (Timeout 10000) [pos] >>= throwAs' KafkaErr
+              reportProblem (K.crTopic msg) (K.crPartition msg) (K.crOffset msg) (K.tpOffset pos)
+              K.seek consumer (K.Timeout 10000) [pos] >>= throwAs' KafkaErr
               go state'
 
     reportProblem t p srcOffset dstOffset = do
@@ -163,23 +166,23 @@ jumpGuard consumer = go M.empty
 -- When a compensation position is returned the cunsumer is expected to 'seek' to that
 -- position to compensate for a jump.
 compensateJumpPos :: (MonadIO m, MonadThrow m)
-                  => KafkaConsumer
-                  -> ConsumerRecord k v -- received record
-                  -> M.Map (TopicName, PartitionId) PartitionOffset -- seen offsets (state)
-                  -> m (Maybe TopicPartition, M.Map (TopicName, PartitionId) PartitionOffset)
+                  => K.KafkaConsumer
+                  -> K.ConsumerRecord k v -- received record
+                  -> M.Map (K.TopicName, K.PartitionId) K.PartitionOffset -- seen offsets (state)
+                  -> m (Maybe K.TopicPartition, M.Map (K.TopicName, K.PartitionId) K.PartitionOffset)
                      -- ^ Maybe position to jump to (compensate) + new seen offsets (state)
 compensateJumpPos consumer cr mem = do
-  let (rt, rp, Offset ro) = (crTopic cr, crPartition cr, crOffset cr)
+  let (rt, rp, K.Offset ro) = (K.crTopic cr, K.crPartition cr, K.crOffset cr)
   let lastPos = M.lookup (rt, rp) mem
   case lastPos of
-    _                          | ro == 0     -> pure (Nothing, mem) -- 1st record, OK
-    Just (PartitionOffset pos) | ro <= pos+1 -> pure (Nothing, mem) -- expected, OK
+    _                            | ro == 0     -> pure (Nothing, mem) -- 1st record, OK
+    Just (K.PartitionOffset pos) | ro <= pos+1 -> pure (Nothing, mem) -- expected, OK
     _ -> do
-      comm <- committed consumer (Timeout 10000) [(rt, rp)] >>= throwAs KafkaErr
+      comm <- K.committed consumer (K.Timeout 10000) [(rt, rp)] >>= throwAs KafkaErr
       let mem' = (M.fromList $ tupledTP <$> comm) `M.union` mem
       case M.lookup (rt, rp) mem' of
-        Just (PartitionOffset pos) | ro <= pos+1 -> pure (Nothing, mem') -- expected, OK
-        Just (PartitionOffset pos) -> pure (Just $ TopicPartition rt rp (PartitionOffset pos), mem')
-        _                          -> pure (Just $ TopicPartition rt rp PartitionOffsetBeginning, mem')
+        Just (K.PartitionOffset pos) | ro <= pos + 1 -> pure (Nothing, mem') -- expected, OK
+        Just (K.PartitionOffset pos)                 -> pure (Just $ K.TopicPartition rt rp (K.PartitionOffset pos), mem')
+        _                                            -> pure (Just $ K.TopicPartition rt rp K.PartitionOffsetBeginning, mem')
   where
-    tupledTP tp = ((tpTopicName tp, tpPartition tp), tpOffset tp)
+    tupledTP tp = ((K.tpTopicName tp, K.tpPartition tp), K.tpOffset tp)

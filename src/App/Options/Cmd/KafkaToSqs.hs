@@ -38,6 +38,7 @@ import qualified Data.ByteString.Char8 as C8
 import qualified Data.Conduit          as C
 import qualified Data.Conduit.List     as L
 import qualified Data.Text             as T
+import qualified Kafka.Conduit.Source  as K
 
 data CmdKafkaToSqs = CmdKafkaToSqs
   { _optInputTopic            :: TopicName
@@ -103,7 +104,7 @@ instance RunApplication CmdKafkaToSqs where
           logDebug $ "Error polling message: " <> show y
           return Nothing
         Right cr -> do
-          logDebug $ "Polled message: " <> show (unPartitionId (crPartition cr)) <> ":" <> show (unOffset (crOffset cr))
+          logDebug $ "Polled message: " <> show (K.unPartitionId (crPartition cr)) <> ":" <> show (K.unOffset (crOffset cr))
           processedMessages += 1
           return $ Just cr)
       .| rightC (handleStream opt sr)                   -- handle messages (see Service.hs)
@@ -117,35 +118,35 @@ instance RunApplication CmdKafkaToSqs where
 onRebalance :: TimedFastLogger -> StatsClient -> RebalanceEvent -> IO ()
 onRebalance lgr stats e = case e of
   RebalanceBeforeAssign ps -> do
-    let partitionsText = "Partitions assigned: " <> T.pack (show (unPartitionId . snd <$> ps))
+    let partitionsText = "Partitions assigned: " <> T.pack (show (K.unPartitionId . snd <$> ps))
     pushLogMessage lgr LevelInfo $ "kafka-to-sqs: Rebalanced. " <> partitionsText
     sendEvt stats $ event "Rebalanced" partitionsText
   RebalanceRevoke ps -> do
-    let partitionsText = "Partitions revoked: " <> T.pack (show (unPartitionId . snd <$> ps))
+    let partitionsText = "Partitions revoked: " <> T.pack (show (K.unPartitionId . snd <$> ps))
     pushLogMessage lgr LevelInfo $ "kafka-to-sqs: Rebalancing. " <> partitionsText
     sendEvt stats $ event "Rebalancing" partitionsText
   _ -> pure ()
 
 sendSqsC :: (MonadAWS m, MonadResource m)
   => T.Text
-  -> Conduit (A.Value A.Type) m ()
+  -> ConduitT (A.Value A.Type) () m ()
 sendSqsC queueUrl = mapMC $ sendSqs queueUrl . T.pack . C8.unpack . toStrict . J.encode
 
-transmitOneC :: Monad m => Conduit a m a
+transmitOneC :: Monad m => ConduitT a a m ()
 transmitOneC = do
   ma <- C.await
   case ma of
     Just a  -> yield a
     Nothing -> return ()
 
-backPressure :: (MonadAWS m, MonadResource m, MonadLogger m) => T.Text -> Int -> Conduit a m a
+backPressure :: (MonadAWS m, MonadResource m, MonadLogger m) => T.Text -> Int -> ConduitT a a m ()
 backPressure queueUrl maxMessages = go 0
   where go n = if n > 0
           then do
             transmitOneC
             go 0
           else do
-            maybeNumMessages <- getSqsApproximateNumberOfMessages queueUrl
+            maybeNumMessages <- lift $ getSqsApproximateNumberOfMessages queueUrl
             case maybeNumMessages of
               Just numMessages -> if numMessages > maxMessages
                 then do
@@ -160,7 +161,7 @@ backPressure queueUrl maxMessages = go 0
 handleStream  :: MonadApp CmdKafkaToSqs m
               => GlobalOptions CmdKafkaToSqs
               -> SchemaRegistry
-              -> Conduit (ConsumerRecord (Maybe ByteString) (Maybe ByteString)) m ()
+              -> ConduitT (ConsumerRecord (Maybe ByteString) (Maybe ByteString)) () m ()
 handleStream opt sr =
   mapC crValue                 -- extracting only value from consumer record
   .| L.catMaybes               -- discard empty values
@@ -194,11 +195,11 @@ decodeMessage sr bs = runExceptT $ do
 
 
 ---------------------- TO BE MOVED TO A LIBRARY -------------------------------
-throwLeftC :: MonadAppError m => (e -> AppError) -> Conduit (Either e a) m (Either e a)
+throwLeftC :: MonadAppError m => (e -> AppError) -> ConduitT (Either e a) (Either e a) m ()
 throwLeftC f = awaitForever $ \msg ->
   throwErrorAs f msg
 
-throwLeftSatisfyC :: MonadAppError m => (e -> AppError) -> (e -> Bool) -> Conduit (Either e a) m (Either e a)
+throwLeftSatisfyC :: MonadAppError m => (e -> AppError) -> (e -> Bool) -> ConduitT (Either e a) (Either e a) m ()
 throwLeftSatisfyC f p = awaitForever $ \case
     Right a -> yield (Right a)
     Left e  | p e -> throwErrorAs f (Left e)

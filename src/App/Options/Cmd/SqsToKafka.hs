@@ -71,10 +71,10 @@ instance RunApplication CmdSqsToKafka where
       .| sinkNull
     return ()
 
-receiveMessageC :: MonadAWS m => String -> Source m (Maybe Message)
+receiveMessageC :: MonadAWS m => String -> ConduitT () (Maybe Message) m ()
 receiveMessageC sqsUrl = do
   let rm = receiveMessage (T.pack sqsUrl)
-  rmr <- send (rm & (rmMaxNumberOfMessages .~ Just 10))
+  rmr <- lift $ send (rm & (rmMaxNumberOfMessages ?~ 10))
   case rmr ^.. rmrsMessages . each of
     []   -> yield Nothing
     msgs -> forM_ msgs $ yield . Just
@@ -99,7 +99,7 @@ handleMessages sr t@(TopicName topic) producer msgs =
       _ -> throwError (AppErr "Unable to decode SQS message")
 
 
-ackMessages :: (MonadAWS m, MonadError AppError m) => String -> Conduit [Message] m ()
+ackMessages :: (MonadAWS m, MonadError AppError m) => String -> ConduitT [Message] () m ()
 ackMessages sqsUrl =
   mapMC $ \msgs -> do
     let receipts = DM.catMaybes $ msgs ^.. each . mReceiptHandle
