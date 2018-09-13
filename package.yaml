@@ -36,6 +36,7 @@ dependencies:
 - amazonka-core
 - amazonka-sqs
 - amazonka-s3
+- antiope-sqs
 - avro
 - bifunctors
 - bytestring

@@ -12,7 +12,6 @@ where
 
 import Arbor.Logger
 import Control.Lens
-import Control.Monad.Base
 import Control.Monad.Catch
 import Control.Monad.Except
 import Control.Monad.Logger         (LoggingT, MonadLogger)
@@ -36,7 +35,6 @@ newtype Application o a = Application
              , Applicative
              , Monad
              , MonadIO
-             , MonadBase IO
              , MonadThrow
              , MonadCatch
              , MonadReader (AppEnv o)
