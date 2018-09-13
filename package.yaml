@@ -8,7 +8,6 @@ license: MIT
 homepage: https://github.com/packetloop/kafka-bind#readme
 extra-source-files:
 - README.md
-- contract/file_change_message.avsc
 default-extensions:
 - BangPatterns
 - DefaultSignatures
@@ -36,6 +35,7 @@ dependencies:
 - amazonka-core
 - amazonka-sqs
 - amazonka-s3
+- antiope-contract
 - antiope-sqs
 - avro
 - bifunctors
@@ -83,7 +83,6 @@ library:
   - App.AWS.Env
   - App.AWS.S3
   - App.AWS.Sqs
-  - App.FileChangeMessage
   - App.Kafka
   - App.Options
   - App.Options.Cmd

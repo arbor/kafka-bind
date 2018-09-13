@@ -3,14 +3,14 @@
 
 module App.DecodeSpec (spec) where
 
-import App.FileChangeMessage
 import App.SqsMessage
 import HaskellWorks.Hspec.Hedgehog
 import Hedgehog
 import Test.Hspec
 import Text.RawString.QQ
 
-import qualified Data.Text as T
+import qualified Antiope.Contract.SQS.FileChangeMessage as Z
+import qualified Data.Text                              as T
 
 {-# ANN module ("HLint: ignore Redundant do"  :: String) #-}
 
@@ -97,46 +97,46 @@ exampleTestMessage = [r|
 spec :: Spec
 spec = describe "App.DecodeSpec" $ do
   it "should parse s3 copy event" $ require $ withTests 1 $ property $ do
-    let expected = Just $ SqsMessageOfFileChangeMessage FileChangeMessage
-          { fileChangeMessageEventName = "ObjectCreated:Copy"
-          , fileChangeMessageEventTime = "2018-02-23T03:54:35.970Z"
-          , fileChangeMessageBucketName = "bucket-name"
-          , fileChangeMessageObjectKey = "1.2.3.4-1514864593.00"
-          , fileChangeMessageObjectSize = 336
-          , fileChangeMessageObjectTag = ""
+    let expected = Just $ SqsMessageOfFileChangeMessage Z.FileChangeMessage
+          { Z.eventName   = "ObjectCreated:Copy"
+          , Z.eventTime   = "2018-02-23T03:54:35.970Z"
+          , Z.bucketName  = "bucket-name"
+          , Z.objectKey   = "1.2.3.4-1514864593.00"
+          , Z.objectSize  = 336
+          , Z.objectTag   = ""
           }
     decodeSqsNotificationBody exampleS3CopyMessage === expected
 
   it "should parse s3 copy event" $ require $ withTests 1 $ property $ do
-    let expected = Just $ SqsMessageOfFileChangeMessage FileChangeMessage
-          { fileChangeMessageEventName = "ObjectCreated:Put"
-          , fileChangeMessageEventTime = "2018-02-26T00:08:07.000Z"
-          , fileChangeMessageBucketName = "bucket-name"
-          , fileChangeMessageObjectKey = "1.2.3.4-1514864593.00"
-          , fileChangeMessageObjectSize = 336
-          , fileChangeMessageObjectTag = "9e30708dc09064bb76d8460c08cbabcb"
+    let expected = Just $ SqsMessageOfFileChangeMessage Z.FileChangeMessage
+          { Z.eventName   = "ObjectCreated:Put"
+          , Z.eventTime   = "2018-02-26T00:08:07.000Z"
+          , Z.bucketName  = "bucket-name"
+          , Z.objectKey   = "1.2.3.4-1514864593.00"
+          , Z.objectSize  = 336
+          , Z.objectTag   = "9e30708dc09064bb76d8460c08cbabcb"
           }
     decodeSqsNotificationBody exampleS3PutMessage === expected
 
   it "should parse s3 complete multipart upload event" $ require $ withTests 1 $ property $ do
-    let expected = Just $ SqsMessageOfFileChangeMessage FileChangeMessage
-          { fileChangeMessageEventName = "ObjectCreated:CompleteMultipartUpload"
-          , fileChangeMessageEventTime = "2018-02-26T00:31:34.009Z"
-          , fileChangeMessageBucketName = "bucket-name"
-          , fileChangeMessageObjectKey = "1.2.3.4-1514864593.00"
-          , fileChangeMessageObjectSize = 6442450944
-          , fileChangeMessageObjectTag = "767e7a8379c0f62c39e0ceeea0e13de9-768"
+    let expected = Just $ SqsMessageOfFileChangeMessage Z.FileChangeMessage
+          { Z.eventName   = "ObjectCreated:CompleteMultipartUpload"
+          , Z.eventTime   = "2018-02-26T00:31:34.009Z"
+          , Z.bucketName  = "bucket-name"
+          , Z.objectKey   = "1.2.3.4-1514864593.00"
+          , Z.objectSize  = 6442450944
+          , Z.objectTag   = "767e7a8379c0f62c39e0ceeea0e13de9-768"
           }
     decodeSqsNotificationBody exampleS3CompleteMultipartUploadMessage === expected
 
   it "should parse s3 object removed delete event" $ require $ withTests 1 $ property $ do
-    let expected = Just $ SqsMessageOfFileChangeMessage FileChangeMessage
-          { fileChangeMessageEventName = "ObjectRemoved:Delete"
-          , fileChangeMessageEventTime = "2018-02-26T03:10:47.522Z"
-          , fileChangeMessageBucketName = "bucket-name"
-          , fileChangeMessageObjectKey = "1.2.3.4-1514864593.00"
-          , fileChangeMessageObjectSize = 0
-          , fileChangeMessageObjectTag = ""
+    let expected = Just $ SqsMessageOfFileChangeMessage Z.FileChangeMessage
+          { Z.eventName   = "ObjectRemoved:Delete"
+          , Z.eventTime   = "2018-02-26T03:10:47.522Z"
+          , Z.bucketName  = "bucket-name"
+          , Z.objectKey   = "1.2.3.4-1514864593.00"
+          , Z.objectSize  = 0
+          , Z.objectTag   = ""
           }
     decodeSqsNotificationBody exampleS3ObjectRemovedMessage === expected
 
