@@ -1,6 +1,8 @@
+{-# LANGUAGE DataKinds        #-}
 {-# LANGUAGE DeriveAnyClass   #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TemplateHaskell  #-}
+{-# LANGUAGE TypeApplications #-}
 
 module App.Options.Cmd where
 
@@ -9,13 +11,14 @@ import App.Options.Cmd.KafkaToSqs as C
 import App.Options.Cmd.SqsToKafka as C
 import Control.Lens
 import Data.Monoid
+import GHC.Generics
 import Options.Applicative
 
 data Cmd
-  = CmdOfCmdHelp        { _cmdHelp        :: CmdHelp        }
-  | CmdOfCmdKafkaToSqs  { _cmdKafkaToSqs  :: CmdKafkaToSqs  }
-  | CmdOfCmdSqsToKafka  { _cmdSqsToKafka  :: CmdSqsToKafka  }
-  deriving (Show, Eq)
+  = CmdOfCmdHelp        { help        :: CmdHelp        }
+  | CmdOfCmdKafkaToSqs  { kafkaToSqs  :: CmdKafkaToSqs  }
+  | CmdOfCmdSqsToKafka  { sqsToKafka  :: CmdSqsToKafka  }
+  deriving (Show, Eq, Generic)
 
 makeLenses ''Cmd
 
