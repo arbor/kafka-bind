@@ -1,116 +1,83 @@
-{-# LANGUAGE FlexibleInstances      #-}
-{-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE TemplateHaskell        #-}
+{-# LANGUAGE DataKinds         #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE TypeApplications  #-}
 
 module App.Options where
 
 import Control.Lens
-import Control.Monad.Logger  (LogLevel (..))
-import Data.Semigroup        ((<>))
-import Data.Text             (Text)
+import Control.Monad.Logger      (LogLevel (..))
+import Data.Generics.Product.Any
+import Data.Semigroup            ((<>))
 import Kafka.Types
-import Network.AWS.Data.Text (FromText (..), fromText)
-import Network.AWS.S3.Types  (Region (..))
-import Network.Socket        (HostName)
-import Network.StatsD        (SampleRate (..))
+import Network.AWS.Data.Text     (FromText (..), fromText)
+import Network.StatsD            (SampleRate (..))
 import Options.Applicative
-import Text.Read             (readEither)
+import Text.Read                 (readEither)
 
-import qualified Data.Text   as T
-import qualified Network.AWS as AWS
+import qualified App.Options.Types as Z
+import qualified Data.Text         as T
+import qualified Network.AWS       as AWS
 
-newtype StatsTag = StatsTag (Text, Text) deriving (Show, Eq)
-
-data KafkaConfig = KafkaConfig
-  { _broker                :: BrokerAddress
-  , _schemaRegistryAddress :: String
-  , _pollTimeoutMs         :: Timeout
-  , _queuedMaxMsgKBytes    :: Int
-  , _debugOpts             :: String
-  , _commitPeriodSec       :: Int
-  } deriving (Eq, Show)
-
-data StatsConfig = StatsConfig
-  { _statsHost       :: HostName
-  , _statsPort       :: Int
-  , _statsTags       :: [StatsTag]
-  , _statsSampleRate :: SampleRate
-  } deriving (Eq, Show)
-
-data GlobalOptions a = GlobalOptions
-  { _optLogLevel    :: LogLevel
-  , _optRegion      :: Region
-  , _optCmd         :: a
-  , _optStatsConfig :: StatsConfig
-  } deriving (Show)
-
-makeClassy ''KafkaConfig
-makeClassy ''StatsConfig
-makeClassy ''GlobalOptions
-
-instance HasStatsConfig (GlobalOptions a) where
-  statsConfig = optStatsConfig
-
-statsConfigParser :: Parser StatsConfig
-statsConfigParser = StatsConfig
+statsConfigParser :: Parser Z.StatsConfig
+statsConfigParser = Z.StatsConfig
   <$> strOption
-    (  long "statsd-host"
-    <> metavar "HOST_NAME"
-    <> showDefault <> value "127.0.0.1"
-    <> help "StatsD host name or IP address")
+      (  long "statsd-host"
+      <> metavar "HOST_NAME"
+      <> showDefault <> value "127.0.0.1"
+      <> help "StatsD host name or IP address")
   <*> readOption
-    (  long "statsd-port"
-    <> metavar "PORT"
-    <> showDefault <> value 8125
-    <> help "StatsD port"
-    <> hidden)
+      ( long "statsd-port"
+        <> metavar "PORT"
+        <> showDefault <> value 8125
+        <> help "StatsD port"
+        <> hidden)
   <*> ( string2Tags <$> strOption
-    (  long "statsd-tags"
-    <> metavar "TAGS"
-    <> showDefault <> value []
-    <> help "StatsD tags"))
+        (  long "statsd-tags"
+        <> metavar "TAGS"
+        <> showDefault <> value []
+        <> help "StatsD tags"))
   <*> ( SampleRate <$> readOption
-    (  long "statsd-sample-rate"
-    <> metavar "SAMPLE_RATE"
-    <> showDefault <> value 0.01
-    <> help "StatsD sample rate"))
+        (  long "statsd-sample-rate"
+        <> metavar "SAMPLE_RATE"
+        <> showDefault <> value 0.01
+        <> help "StatsD sample rate"))
 
-kafkaConfigParser :: Parser KafkaConfig
-kafkaConfigParser = KafkaConfig
+kafkaConfigParser :: Parser Z.KafkaConfig
+kafkaConfigParser = Z.KafkaConfig
   <$> ( BrokerAddress <$> strOption
-    (  long "kafka-broker"
-    <> metavar "ADDRESS:PORT"
-    <> help "Kafka bootstrap broker"
-    ))
+        (  long "kafka-broker"
+        <> metavar "ADDRESS:PORT"
+        <> help "Kafka bootstrap broker"
+        ))
   <*> strOption
-    (  long "kafka-schema-registry"
-    <> metavar "HTTP_URL:PORT"
-    <> help "Schema registry address")
+      (  long "kafka-schema-registry"
+      <> metavar "HTTP_URL:PORT"
+      <> help "Schema registry address")
   <*> (Timeout <$> readOption
-    (  long "kafka-poll-timeout-ms"
-    <> metavar "KAFKA_POLL_TIMEOUT_MS"
-    <> showDefault <> value 1000
-    <> help "Kafka poll timeout (in milliseconds)"))
+      (  long "kafka-poll-timeout-ms"
+      <> metavar "KAFKA_POLL_TIMEOUT_MS"
+      <> showDefault <> value 1000
+      <> help "Kafka poll timeout (in milliseconds)"))
   <*> readOption
-    (  long "kafka-queued-max-messages-kbytes"
-    <> metavar "KAFKA_QUEUED_MAX_MESSAGES_KBYTES"
-    <> showDefault <> value 100000
-    <> help "Kafka queued.max.messages.kbytes")
+      (  long "kafka-queued-max-messages-kbytes"
+      <> metavar "KAFKA_QUEUED_MAX_MESSAGES_KBYTES"
+      <> showDefault <> value 100000
+      <> help "Kafka queued.max.messages.kbytes")
   <*> strOption
-    (  long "kafka-debug-enable"
-    <> metavar "KAFKA_DEBUG_ENABLE"
-    <> showDefault <> value "broker,protocol"
-    <> help "Kafka debug modules, comma separated names: see debug in CONFIGURATION.md"
-    )
+      (  long "kafka-debug-enable"
+      <> metavar "KAFKA_DEBUG_ENABLE"
+      <> showDefault <> value "broker,protocol"
+      <> help "Kafka debug modules, comma separated names: see debug in CONFIGURATION.md"
+      )
   <*> readOption
-    (  long "kafka-consumer-commit-period-sec"
-    <> metavar "KAFKA_CONSUMER_COMMIT_PERIOD_SEC"
-    <> showDefault <> value 60
-    <> help "Kafka consumer offsets commit period (in seconds)"
-    )
+      (  long "kafka-consumer-commit-period-sec"
+      <> metavar "KAFKA_CONSUMER_COMMIT_PERIOD_SEC"
+      <> showDefault <> value 60
+      <> help "Kafka consumer offsets commit period (in seconds)"
+      )
 
-awsLogLevel :: GlobalOptions a -> AWS.LogLevel
-awsLogLevel o = case o ^. optLogLevel of
+awsLogLevel :: Z.GlobalOptions a -> AWS.LogLevel
+awsLogLevel o = case o ^. the @"logLevel" of
   LevelError -> AWS.Error
   LevelWarn  -> AWS.Error
   LevelInfo  -> AWS.Error
@@ -124,12 +91,10 @@ readOptionMsg :: Read a => String -> Mod OptionFields a -> Parser a
 readOptionMsg msg = option $ eitherReader (either (Left . const msg) Right . readEither)
 
 readOrFromTextOption :: (Read a, FromText a) => Mod OptionFields a -> Parser a
-readOrFromTextOption =
-  let fromStr s = readEither s <|> fromText (T.pack s)
-  in option $ eitherReader fromStr
+readOrFromTextOption = option $ eitherReader fromStr
+  where fromStr s = readEither s <|> fromText (T.pack s)
 
-string2Tags :: String -> [StatsTag]
-string2Tags s = StatsTag . splitTag <$> splitTags
-  where
-    splitTags = T.split (==',') (T.pack s)
-    splitTag t = T.drop 1 <$> T.break (==':') t
+string2Tags :: String -> [Z.StatsTag]
+string2Tags s = Z.StatsTag . splitTag <$> splitTags
+  where splitTags = T.split (== ',') (T.pack s)
+        splitTag t = T.drop 1 <$> T.break (== ':') t

@@ -1,9 +1,11 @@
+{-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE DeriveAnyClass        #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE TemplateHaskell       #-}
+{-# LANGUAGE TypeApplications      #-}
 
 module App.Options.Cmd.SqsToKafka
   ( CmdSqsToKafka(..)
@@ -21,7 +23,9 @@ import Control.Lens
 import Control.Monad                        (when)
 import Control.Monad.Except
 import Data.Either.Combinators
+import Data.Generics.Product.Any
 import Data.Monoid
+import GHC.Generics
 import HaskellWorks.Data.Conduit.Combinator
 import Kafka.Avro
 import Kafka.Conduit.Sink
@@ -31,34 +35,36 @@ import Network.AWS.SQS.ReceiveMessage
 import Network.AWS.SQS.Types
 import Options.Applicative
 
+import qualified App.Has              as H
+import qualified App.Options.Types    as Z
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Maybe           as DM (catMaybes)
 import qualified Data.Text            as T
 
 data CmdSqsToKafka = CmdSqsToKafka
-  { _cmdSqsToKafkaInputSqsUrl :: String
-  , _cmdSqsToKafkaOutputTopic :: TopicName
-  , _cmdSqsToKafkaKafkaConfig :: KafkaConfig
-  } deriving (Show, Eq)
+  { inputSqsUrl :: String
+  , outputTopic :: TopicName
+  , kafkaConfig :: Z.KafkaConfig
+  } deriving (Show, Eq, Generic)
 
 makeLenses ''CmdSqsToKafka
 
-instance HasKafkaConfig (GlobalOptions CmdSqsToKafka) where
-  kafkaConfig = optCmd . cmdSqsToKafkaKafkaConfig
+instance H.HasKafkaConfig (Z.GlobalOptions CmdSqsToKafka) where
+  kafkaConfig = the @"cmd" . the @"kafkaConfig"
 
-instance HasKafkaConfig (AppEnv CmdSqsToKafka) where
-  kafkaConfig = appOptions . kafkaConfig
+instance H.HasKafkaConfig (AppEnv CmdSqsToKafka) where
+  kafkaConfig = the @"options" . H.kafkaConfig
 
 instance RunApplication CmdSqsToKafka where
   runApplication envApp = runApplicationM envApp $ do
-    opt <- view appOptions
-    kafkaConf <- view kafkaConfig
+    opt <- view $ the @"options"
+    kafkaConf <- view H.kafkaConfig
 
-    let sqsUrl = opt ^. optCmd . cmdSqsToKafkaInputSqsUrl
-    let kafkaTopic = opt ^. optCmd . cmdSqsToKafkaOutputTopic
+    let sqsUrl      = opt ^. the @"cmd" . the @"inputSqsUrl"
+    let kafkaTopic  = opt ^. the @"cmd" . the @"outputTopic"
 
     logInfo "Instantiating Schema Registry"
-    sr <- schemaRegistry (kafkaConf ^. schemaRegistryAddress)
+    sr <- schemaRegistry (kafkaConf ^. the @"schemaRegistryAddress")
 
     logInfo "Creating Kafka Producer"
     producer <- mkProducer
@@ -118,12 +124,12 @@ ackMessages sqsUrl =
 parserCmdSqsToKafka :: Parser CmdSqsToKafka
 parserCmdSqsToKafka = CmdSqsToKafka
   <$> strOption
-    (  long "input-sqs-url"
-    <> metavar "SQS_URL"
-    <> help "Input SQS URL")
+      (  long "input-sqs-url"
+      <> metavar "SQS_URL"
+      <> help "Input SQS URL")
   <*> (TopicName <$>
-    strOption
-    (  long "output-topic-name"
-    <> metavar "OUTPUT_TOPIC"
-    <> help "Output kafka topic"))
+      strOption
+      (  long "output-topic-name"
+      <> metavar "OUTPUT_TOPIC"
+      <> help "Output kafka topic"))
   <*> kafkaConfigParser

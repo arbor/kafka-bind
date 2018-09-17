@@ -6,8 +6,10 @@ maintainer: mayhem@arbor.net
 copyright: Arbor Networks
 license: MIT
 homepage: https://github.com/packetloop/kafka-bind#readme
+
 extra-source-files:
 - README.md
+
 default-extensions:
 - BangPatterns
 - DefaultSignatures
@@ -29,8 +31,10 @@ default-extensions:
 - ScopedTypeVariables
 - StandaloneDeriving
 - TupleSections
+
 dependencies:
 - base >=4.7 && <5
+- aeson
 - amazonka
 - amazonka-core
 - amazonka-sqs
@@ -49,6 +53,7 @@ dependencies:
 - errors
 - exceptions
 - fast-logger
+- generic-lens
 - hs-arbor-logger
 - http-client
 - hw-conduit
@@ -65,6 +70,7 @@ dependencies:
 - text
 - transformers
 - transformers-base
+
 library:
   source-dirs: src
   default-extensions: []
@@ -74,27 +80,7 @@ library:
   - -Wincomplete-record-updates
   - -Wincomplete-uni-patterns
   - -Wredundant-constraints
-  exposed-modules:
-  - App
-  - App.Application
-  - App.AppError
-  - App.AppEnv
-  - App.AppState
-  - App.AWS.Env
-  - App.AWS.S3
-  - App.AWS.Sqs
-  - App.Kafka
-  - App.Options
-  - App.Options.Cmd
-  - App.Options.Cmd.Help
-  - App.Options.Cmd.KafkaToSqs
-  - App.Options.Cmd.SqsToKafka
-  - App.Options.Parser
-  - App.Orphans
-  - App.RunApplication
-  - App.SqsMessage
   dependencies:
-  - aeson
   - aeson-lens
   - conduit-extra
   - http-types
@@ -107,6 +93,7 @@ library:
     - -D__attribute__(A)=
     - -D_Nullable=
     - -D_Nonnull=
+
 executables:
   kafka-bind:
     main: Main.hs
@@ -124,8 +111,6 @@ executables:
     - -O2
     dependencies:
     - kafka-bind
-    - aeson
-    - amazonka-sqs
     - optparse-applicative
     when:
     - condition: os(osx)
@@ -133,6 +118,7 @@ executables:
       - -D__attribute__(A)=
       - -D_Nullable=
       - -D_Nonnull=
+
 tests:
   tests:
     main: Spec.hs

@@ -1,4 +1,6 @@
+{-# LANGUAGE DataKinds           #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications    #-}
 
 module Main where
 
@@ -10,16 +12,18 @@ import App.Options.Parser
 import App.RunApplication
 import Arbor.Logger
 import Control.Lens
+import Data.Generics.Product.Any
 import Data.Semigroup             ((<>))
 import Network.AWS.Env
 import Network.StatsD             as S
 import System.Environment
 
-import qualified Data.Text as T
+import qualified App.Options.Types as Z
+import qualified Data.Text         as T
 
-mkAppEnv :: StatsClient -> Logger -> Env -> GlobalOptions c -> c -> AppEnv c
+mkAppEnv :: StatsClient -> Logger -> Env -> Z.GlobalOptions c -> c -> AppEnv c
 mkAppEnv stats lgr envAws opt cmd =
-  let newOpt = opt { _optCmd = cmd }
+  let newOpt = opt { Z.cmd = cmd }
       envApp = AppEnv newOpt envAws stats lgr
   in envApp
 
@@ -27,14 +31,14 @@ main :: IO ()
 main = do
   opt <- parseOptions
   progName <- T.pack <$> getProgName
-  let logLvk    = opt ^. optLogLevel
-  let statsConf = opt ^. optStatsConfig
+  let logLvk    = opt ^. the @"logLevel"
+  let statsConf = opt ^. the @"statsConfig"
 
   withStdOutTimedFastLogger $ \lgr -> do
     withStatsClient progName statsConf $ \stats -> do
-      envAws <- mkEnv (opt ^. optRegion) logLvk lgr
-      let mkAppEnv2 cmd = mkAppEnv stats (Logger lgr logLvk) envAws (opt { _optCmd = cmd }) cmd
-      res <- case opt ^. optCmd of
+      envAws <- mkEnv (opt ^. the @"region") logLvk lgr
+      let mkAppEnv2 cmd = mkAppEnv stats (Logger lgr logLvk) envAws (opt { Z.cmd = cmd }) cmd
+      res <- case opt ^. the @"cmd" of
         CmdOfCmdKafkaToSqs cmd -> runApplication (mkAppEnv2 cmd)
         CmdOfCmdSqsToKafka cmd -> runApplication (mkAppEnv2 cmd)
         cmd                    -> return $ Left (AppErr ("Not implemented: " <> show cmd))

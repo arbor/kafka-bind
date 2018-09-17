@@ -1,10 +1,10 @@
-{-# LANGUAGE DeriveAnyClass        #-}
+{-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
-{-# LANGUAGE TemplateHaskell       #-}
+{-# LANGUAGE TypeApplications      #-}
 
 module App.Options.Cmd.KafkaToSqs where
 
@@ -19,11 +19,14 @@ import Control.Concurrent                   (threadDelay)
 import Control.Exception
 import Control.Lens
 import Control.Monad.Except
+import Control.Monad.Reader
 import Data.Aeson                           as J
 import Data.ByteString                      (ByteString)
 import Data.ByteString.Lazy                 (fromStrict, toStrict)
+import Data.Generics.Product.Any
 import Data.Maybe                           (catMaybes)
 import Data.Monoid
+import GHC.Generics
 import HaskellWorks.Data.Conduit.Combinator
 import Kafka.Avro
 import Kafka.Conduit.Source
@@ -31,6 +34,8 @@ import Network.AWS
 import Network.StatsD                       as S
 import Options.Applicative
 
+import qualified App.Has               as H
+import qualified App.Options.Types     as Z
 import qualified Data.Avro.Decode      as A
 import qualified Data.Avro.Schema      as A
 import qualified Data.Avro.Types       as A
@@ -41,14 +46,12 @@ import qualified Data.Text             as T
 import qualified Kafka.Conduit.Source  as K
 
 data CmdKafkaToSqs = CmdKafkaToSqs
-  { _optInputTopic            :: TopicName
-  , _consumerGroupId          :: ConsumerGroupId
-  , _outputSqsUrl             :: String
-  , _outputMaxQueuedMessages  :: Int
-  , _cmdKafkaToSqsKafkaConfig :: KafkaConfig
-  } deriving (Show, Eq)
-
-makeLenses ''CmdKafkaToSqs
+  { inputTopic              :: TopicName
+  , consumerGroupId         :: ConsumerGroupId
+  , outputSqsUrl            :: String
+  , outputMaxQueuedMessages :: Int
+  , kafkaConfig             :: Z.KafkaConfig
+  } deriving (Show, Eq, Generic)
 
 parserCmdKafkaToSqs :: Parser CmdKafkaToSqs
 parserCmdKafkaToSqs = CmdKafkaToSqs
@@ -70,31 +73,34 @@ parserCmdKafkaToSqs = CmdKafkaToSqs
         <> help "Max number of messages in output queue before backpressure is applied")
   <*> kafkaConfigParser
 
-instance HasKafkaConfig (GlobalOptions CmdKafkaToSqs) where
-  kafkaConfig = optCmd . cmdKafkaToSqsKafkaConfig
+instance H.HasKafkaConfig (Z.GlobalOptions CmdKafkaToSqs) where
+  kafkaConfig = the @"cmd" . the @"kafkaConfig"
 
-instance HasKafkaConfig (AppEnv CmdKafkaToSqs) where
-  kafkaConfig = appOptions . kafkaConfig
+instance H.HasKafkaConfig (AppEnv CmdKafkaToSqs) where
+  kafkaConfig = the @"options" . H.kafkaConfig
 
 instance RunApplication CmdKafkaToSqs where
   runApplication envApp = runApplicationM envApp $ do
-    opt       <- view appOptions
-    kafkaConf <- view kafkaConfig
-    env       <- view appEnv
-    let lgr   = env ^. appLogger . lgLogger
-    let stats = env ^. appStatsClient
+    opt       <- view $ the @"options"
+    kafkaConf <- view H.kafkaConfig
+    env       <- ask
+    let lgr   = env ^. the @"logger" . the @"logger"
+    let stats = env ^. the @"statsClient"
 
     logDebug "Debug logging enabled"
 
     logInfo "Creating Kafka Consumer"
-    consumer <- mkConsumer (opt ^. optCmd ^. consumerGroupId) (opt ^. optCmd ^. optInputTopic) (onRebalance lgr stats)
+    consumer <- mkConsumer
+      (opt ^. the @"cmd" . the @"consumerGroupId")
+      (opt ^. the @"cmd" . the @"inputTopic")
+      (onRebalance lgr stats)
 
     logInfo "Instantiating Schema Registry"
-    sr <- schemaRegistry (kafkaConf ^. schemaRegistryAddress)
+    sr <- schemaRegistry (kafkaConf ^. the @"schemaRegistryAddress")
 
     logInfo "Running Kafka Consumer"
     runConduit $
-      kafkaSourceNoClose consumer (kafkaConf ^. pollTimeoutMs)
+      kafkaSourceNoClose consumer (kafkaConf ^. the @"pollTimeoutMs")
       .| effectC (\e -> logDebug $ "Message: " <> show e)
       .| throwLeftSatisfyC KafkaErr isFatal             -- throw any fatal error
       .| skipNonFatalExcept [isPollTimeout]             -- discard any non-fatal except poll timeouts
@@ -108,7 +114,7 @@ instance RunApplication CmdKafkaToSqs where
           processedMessages += 1
           return $ Just cr)
       .| rightC (handleStream opt sr)                   -- handle messages (see Service.hs)
-      .| everyNSeconds (kafkaConf ^. commitPeriodSec)   -- only commit ever N seconds, so we don't hammer Kafka.
+      .| everyNSeconds (kafkaConf ^. the @"commitPeriodSec")   -- only commit ever N seconds, so we don't hammer Kafka.
       .| effectC' (do
           n <- use processedMessages
           logInfo $ "Committing offsets.  Messages processed: " <> show n)
@@ -133,11 +139,7 @@ sendSqsC :: (MonadAWS m, MonadResource m)
 sendSqsC queueUrl = mapMC $ sendSqs queueUrl . T.pack . C8.unpack . toStrict . J.encode
 
 transmitOneC :: Monad m => ConduitT a a m ()
-transmitOneC = do
-  ma <- C.await
-  case ma of
-    Just a  -> yield a
-    Nothing -> return ()
+transmitOneC = C.await >>= mapM_ yield
 
 backPressure :: (MonadAWS m, MonadResource m, MonadLogger m) => T.Text -> Int -> ConduitT a a m ()
 backPressure queueUrl maxMessages = go 0
@@ -159,7 +161,7 @@ backPressure queueUrl maxMessages = go 0
 -- | Handles the stream of incoming messages.
 -- Emit values downstream because offsets are committed based on their present.
 handleStream  :: MonadApp CmdKafkaToSqs m
-              => GlobalOptions CmdKafkaToSqs
+              => Z.GlobalOptions CmdKafkaToSqs
               -> SchemaRegistry
               -> ConduitT (ConsumerRecord (Maybe ByteString) (Maybe ByteString)) () m ()
 handleStream opt sr =
@@ -171,8 +173,8 @@ handleStream opt sr =
   .| backPressure queueUrl maxMessages
   .| effectC (\e -> logDebug $ "Sending SQS: " <> show e)
   .| sendSqsC queueUrl
-  where queueUrl    = T.pack (opt ^. optCmd ^. outputSqsUrl)
-        maxMessages = opt ^. optCmd ^. outputMaxQueuedMessages
+  where queueUrl    = T.pack (opt ^. the @"cmd" . the @"outputSqsUrl")
+        maxMessages = opt ^. the @"cmd" . the @"outputMaxQueuedMessages"
 
 asExceptT :: Monad m => (e -> e') -> m (Either e a) -> ExceptT e' m a
 asExceptT f me = ExceptT $ left f <$> me
@@ -207,16 +209,15 @@ throwLeftSatisfyC f p = awaitForever $ \case
 
 -------------------------------------------------------------------------------
 
-withStatsClient :: AppName -> StatsConfig -> (StatsClient -> IO a) -> IO a
+withStatsClient :: AppName -> Z.StatsConfig -> (StatsClient -> IO a) -> IO a
 withStatsClient appName statsConf f = do
   globalTags <- mkStatsTags statsConf
-  let statsOpts = DogStatsSettings (statsConf ^. statsHost) (statsConf ^. statsPort)
+  let statsOpts = DogStatsSettings (statsConf ^. the @"host") (statsConf ^. the @"port")
   bracket (createStatsClient statsOpts (MetricName appName) globalTags) closeStatsClient f
 
-mkStatsTags :: StatsConfig -> IO [Tag]
+mkStatsTags :: Z.StatsConfig -> IO [Tag]
 mkStatsTags statsConf = do
   deplId <- envTag "TASK_DEPLOY_ID" "deploy_id"
   let envTags = catMaybes [deplId]
-  return $ envTags <> (statsConf ^. statsTags <&> toTag)
-  where
-    toTag (StatsTag (k, v)) = S.tag k v
+  return $ envTags <> (statsConf ^. the @"tags" <&> toTag)
+  where toTag (Z.StatsTag (k, v)) = S.tag k v

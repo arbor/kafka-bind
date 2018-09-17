@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE ExplicitForAll             #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
@@ -5,11 +6,15 @@
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE RankNTypes                 #-}
 {-# LANGUAGE StandaloneDeriving         #-}
+{-# LANGUAGE TypeApplications           #-}
 {-# LANGUAGE TypeSynonymInstances       #-}
 
-module App.Application
-where
+module App.Application where
 
+import App.AppEnv
+import App.AppError
+import App.AppState
+import App.Orphans                  ()
 import Arbor.Logger
 import Control.Lens
 import Control.Monad.Catch
@@ -18,14 +23,10 @@ import Control.Monad.Logger         (LoggingT, MonadLogger)
 import Control.Monad.Reader
 import Control.Monad.State.Strict   (MonadState (..), StateT, execStateT)
 import Control.Monad.Trans.Resource
+import Data.Generics.Product.Any
 import Data.Text                    (Text)
 import Network.AWS                  as AWS hiding (LogLevel)
 import Network.StatsD               as S
-
-import App.AppEnv
-import App.AppError
-import App.AppState
-import App.Orphans  ()
 
 type AppName = Text
 
@@ -64,7 +65,7 @@ deriving instance MonadAppError (Application o)
 deriving instance MonadApp o (Application o)
 
 instance MonadStats (Application o) where
-  getStatsClient = reader _appStatsClient
+  getStatsClient = view $ the @"statsClient"
 
 runApplicationM :: Show o
                 => AppEnv o
@@ -72,11 +73,10 @@ runApplicationM :: Show o
                 -> IO (Either AppError AppState)
 runApplicationM envApp f =
   runResourceT
-    . runAWS (envApp ^. appAwsEnv)
-    . runTimedLogT (envApp ^. appLogger . lgLogLevel) (envApp ^. appLogger . lgLogger)
+    . runAWS (envApp ^. the @"awsEnv")
+    . runTimedLogT (envApp ^. the @"logger" . the @"logLevel") (envApp ^. the @"logger" . the @"logger")
     . runExceptT
     . flip execStateT appStateEmpty
     $ do
-        logInfo $ show (envApp ^. appOptions)
+        logInfo $ show (envApp ^. the @"options")
         runReaderT (unApp f) envApp
-
