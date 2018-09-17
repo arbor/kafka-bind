@@ -135,8 +135,13 @@ onRebalance lgr stats e = case e of
 
 sendSqsC :: (MonadAWS m, MonadResource m)
   => T.Text
-  -> ConduitT (A.Value A.Type) () m ()
-sendSqsC queueUrl = mapMC $ sendSqs queueUrl . T.pack . C8.unpack . toStrict . J.encode
+  -> ConduitT J.Value () m ()
+sendSqsC queueUrl = mapMC
+  $ sendSqs queueUrl
+  . T.pack
+  . C8.unpack
+  . toStrict
+  . J.encode
 
 transmitOneC :: Monad m => ConduitT a a m ()
 transmitOneC = C.await >>= mapM_ yield
@@ -172,6 +177,7 @@ handleStream opt sr =
   .| effectC (\e -> logDebug $ "SQS message for sending: " <> show e)
   .| backPressure queueUrl maxMessages
   .| effectC (\e -> logDebug $ "Sending SQS: " <> show e)
+  .| mapC J.toJSON
   .| sendSqsC queueUrl
   where queueUrl    = T.pack (opt ^. the @"cmd" . the @"outputSqsUrl")
         maxMessages = opt ^. the @"cmd" . the @"outputMaxQueuedMessages"
