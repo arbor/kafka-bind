@@ -4,20 +4,20 @@ module App.SqsMessage
   , SqsMessage (..)
   ) where
 
-import App.FileChangeMessage
 import Control.Lens
 import Data.Aeson
 import Data.Aeson.Lens
-import Data.ByteString.Lazy  (fromStrict)
-import Data.Maybe            (fromMaybe)
+import Data.ByteString.Lazy (fromStrict)
+import Data.Maybe           (fromMaybe)
 import Network.AWS.SQS
 
-import qualified Data.ByteString.Char8 as C8
-import qualified Data.Text             as T
+import qualified Antiope.Contract.SQS.FileChangeMessage as Z
+import qualified Data.ByteString.Char8                  as C8
+import qualified Data.Text                              as T
 
 data SqsMessage
   = SqsMessageOfS3TestEvent
-  | SqsMessageOfFileChangeMessage FileChangeMessage
+  | SqsMessageOfFileChangeMessage Z.FileChangeMessage
   | NoMessage
   deriving (Eq, Show)
 
@@ -63,11 +63,11 @@ decodeSqsMessage msg = do
   let objectTag = fromMaybe "" (objectAws ^. key "eTag")
 
   return $ SqsMessageOfFileChangeMessage
-    FileChangeMessage
-      { fileChangeMessageEventName  = eventName
-      , fileChangeMessageEventTime  = eventTime
-      , fileChangeMessageBucketName = bucketName
-      , fileChangeMessageObjectKey  = objectKey
-      , fileChangeMessageObjectSize = objectSize
-      , fileChangeMessageObjectTag  = objectTag
+    Z.FileChangeMessage
+      { Z.eventName  = eventName
+      , Z.eventTime  = eventTime
+      , Z.bucketName = bucketName
+      , Z.objectKey  = objectKey
+      , Z.objectSize = objectSize
+      , Z.objectTag  = objectTag
       }
