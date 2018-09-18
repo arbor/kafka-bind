@@ -9,15 +9,18 @@
 
 module App.Options.Cmd.KafkaToSqs where
 
-import App
+import App.AppError
+import App.Application
 import App.AWS.Sqs
 import App.Json
 import App.Kafka
+import App.Options
 import App.RunApplication
 import Arbor.Logger
 import Conduit
 import Control.Arrow                        (left)
 import Control.Concurrent                   (threadDelay)
+import Control.Concurrent.STM               (atomically, modifyTVar, readTVar)
 import Control.Exception
 import Control.Lens
 import Control.Monad.Except
@@ -36,6 +39,7 @@ import Network.AWS
 import Network.StatsD                       as S
 import Options.Applicative
 
+import qualified App.AppEnv            as E
 import qualified App.Has               as H
 import qualified App.Options.Types     as Z
 import qualified Data.Avro.Decode      as A
@@ -87,14 +91,15 @@ parserCmdKafkaToSqs = CmdKafkaToSqs
 instance H.HasKafkaConfig (Z.GlobalOptions CmdKafkaToSqs) where
   kafkaConfig = the @"cmd" . the @"kafkaConfig"
 
-instance H.HasKafkaConfig (AppEnv CmdKafkaToSqs) where
+instance H.HasKafkaConfig (E.AppEnv CmdKafkaToSqs) where
   kafkaConfig = the @"options" . H.kafkaConfig
 
 instance RunApplication CmdKafkaToSqs where
   runApplication envApp = runApplicationM envApp $ do
-    opt       <- view $ the @"options"
-    kafkaConf <- view H.kafkaConfig
-    env       <- ask
+    opt               <- view $ the @"options"
+    kafkaConf         <- view H.kafkaConfig
+    env               <- ask
+    processedMessages <- view $ the @"counters" . the @"processedMessages"
     let lgr   = env ^. the @"logger" . the @"logger"
     let stats = env ^. the @"statsClient"
     let rj    = opt ^. the @"cmd" . the @"rewriteJson" <&> pickRewriteJson & reverse & foldl (.) id
@@ -123,12 +128,12 @@ instance RunApplication CmdKafkaToSqs where
           return Nothing
         Right cr -> do
           logDebug $ "Polled message: " <> show (K.unPartitionId (crPartition cr)) <> ":" <> show (K.unOffset (crOffset cr))
-          processedMessages += 1
+          liftIO $ atomically $ modifyTVar processedMessages (+1)
           return $ Just cr)
       .| rightC (handleStream rj opt sr)                      -- handle messages (see Service.hs)
       .| everyNSeconds (kafkaConf ^. the @"commitPeriodSec")  -- only commit ever N seconds, so we don't hammer Kafka.
       .| effectC' (do
-          n <- use processedMessages
+          n <- liftIO $ atomically $ readTVar processedMessages
           logInfo $ "Committing offsets.  Messages processed: " <> show n)
       .| effectC' (commitAllOffsets OffsetCommit consumer)
       .| sinkNull
