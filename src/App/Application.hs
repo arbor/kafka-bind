@@ -30,7 +30,7 @@ import qualified App.AppEnv as E
 type AppName = Text
 
 newtype Application o a = Application
-  { unApp :: ReaderT (E.AppEnv o) (ExceptT AppError (LoggingT AWS)) a
+  { unApp :: ReaderT (E.AppEnv o) (LoggingT AWS) a
   } deriving ( Functor
              , Applicative
              , Monad
@@ -38,14 +38,9 @@ newtype Application o a = Application
              , MonadThrow
              , MonadCatch
              , MonadReader (E.AppEnv o)
-             , MonadError AppError
              , MonadAWS
              , MonadLogger
              , MonadResource)
-
--- This is here to simplify the constraint
--- it also helps to avoid propagating FlexibleContexts requirements
-class MonadError AppError m => MonadAppError m where
 
 class ( MonadReader (E.AppEnv o) m
       , MonadLogger m
@@ -54,25 +49,26 @@ class ( MonadReader (E.AppEnv o) m
       , MonadResource m
       , MonadThrow m
       , MonadCatch m
-      , MonadError AppError m
-      , MonadAppError m
       , MonadIO m) => MonadApp o m where
 
-deriving instance MonadAppError (Application o)
 deriving instance MonadApp o (Application o)
 
 instance MonadStats (Application o) where
   getStatsClient = view $ the @"statsClient"
 
+instance MonadStats (Application o) => MonadStats (ExceptT e (Application o)) where
+  getStatsClient = lift getStatsClient
+
+instance MonadApp o (Application o) => MonadApp o ((ExceptT e) (Application o)) where
+
 runApplicationM :: Show o
                 => E.AppEnv o
-                -> Application o ()
+                -> Application o (Either AppError ())
                 -> IO (Either AppError ())
 runApplicationM envApp f =
   runResourceT
     . runAWS (envApp ^. the @"awsEnv")
     . runTimedLogT (envApp ^. the @"logger" . the @"logLevel") (envApp ^. the @"logger" . the @"logger")
-    . runExceptT
     $ do
         logInfo $ show (envApp ^. the @"options")
         runReaderT (unApp f) envApp

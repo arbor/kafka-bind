@@ -20,7 +20,7 @@ import Arbor.Logger
 import Conduit
 import Control.Arrow                        (left)
 import Control.Concurrent                   (threadDelay)
-import Control.Concurrent.STM               (atomically, modifyTVar, readTVar)
+import Control.Concurrent.STM               (atomically, modifyTVar, readTVarIO)
 import Control.Exception
 import Control.Lens
 import Control.Monad.Except
@@ -95,14 +95,15 @@ instance H.HasKafkaConfig (E.AppEnv CmdKafkaToSqs) where
   kafkaConfig = the @"options" . H.kafkaConfig
 
 instance RunApplication CmdKafkaToSqs where
-  runApplication envApp = runApplicationM envApp $ do
+  runApplication envApp = runApplicationM envApp $ runExceptT $ do
     opt               <- view $ the @"options"
     kafkaConf         <- view H.kafkaConfig
     env               <- ask
     processedMessages <- view $ the @"counters" . the @"processedMessages"
     let lgr   = env ^. the @"logger" . the @"logger"
     let stats = env ^. the @"statsClient"
-    let rj    = opt ^. the @"cmd" . the @"rewriteJson" <&> pickRewriteJson & reverse & foldl (.) id
+
+    rj <- opt ^. the @"cmd" . the @"rewriteJson" <&> pickRewriteJson & sequence <&> reverse <&> foldl (.) id
 
     logDebug "Debug logging enabled"
 
@@ -133,7 +134,7 @@ instance RunApplication CmdKafkaToSqs where
       .| rightC (handleStream rj opt sr)                      -- handle messages (see Service.hs)
       .| everyNSeconds (kafkaConf ^. the @"commitPeriodSec")  -- only commit ever N seconds, so we don't hammer Kafka.
       .| effectC' (do
-          n <- liftIO $ atomically $ readTVar processedMessages
+          n <- liftIO $ readTVarIO processedMessages
           logInfo $ "Committing offsets.  Messages processed: " <> show n)
       .| effectC' (commitAllOffsets OffsetCommit consumer)
       .| sinkNull
@@ -221,11 +222,11 @@ decodeMessage sr bs = runExceptT $ do
   asExceptT (DecodeError sch) (pure $ A.decodeAvro sch payload)
 
 ---------------------- TO BE MOVED TO A LIBRARY -------------------------------
-throwLeftC :: MonadAppError m => (e -> AppError) -> ConduitT (Either e a) (Either e a) m ()
+throwLeftC :: MonadError AppError m => (e -> AppError) -> ConduitT (Either e a) (Either e a) m ()
 throwLeftC f = awaitForever $ \msg ->
   throwErrorAs f msg
 
-throwLeftSatisfyC :: MonadAppError m => (e -> AppError) -> (e -> Bool) -> ConduitT (Either e a) (Either e a) m ()
+throwLeftSatisfyC :: MonadError AppError m => (e -> AppError) -> (e -> Bool) -> ConduitT (Either e a) (Either e a) m ()
 throwLeftSatisfyC f p = awaitForever $ \case
     Right a -> yield (Right a)
     Left e  | p e -> throwErrorAs f (Left e)
@@ -246,7 +247,7 @@ mkStatsTags statsConf = do
   return $ envTags <> (statsConf ^. the @"tags" <&> toTag)
   where toTag (Z.StatsTag (k, v)) = S.tag k v
 
-pickRewriteJson :: String -> (J.Value -> J.Value)
+pickRewriteJson :: Monad m => String -> ExceptT AppError m (J.Value -> J.Value)
 pickRewriteJson strategyName = case strategyName of
-    "fcm-to-rc" -> fileChangeMessageToResourceChanged
-    unknown     -> error $ "Unknown rewrite strategy: " <> unknown
+  "fcm-to-rc" -> return fileChangeMessageToResourceChanged
+  unknown     -> throwError $ AppErr $ "Unknown rewrite strategy: " <> unknown
