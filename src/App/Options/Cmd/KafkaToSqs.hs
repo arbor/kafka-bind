@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds             #-}
+{-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE LambdaCase            #-}
@@ -10,6 +11,7 @@ module App.Options.Cmd.KafkaToSqs where
 
 import App
 import App.AWS.Sqs
+import App.Json
 import App.Kafka
 import App.RunApplication
 import Arbor.Logger
@@ -45,11 +47,14 @@ import qualified Data.Conduit.List     as L
 import qualified Data.Text             as T
 import qualified Kafka.Conduit.Source  as K
 
+type RewriteJson = String
+
 data CmdKafkaToSqs = CmdKafkaToSqs
   { inputTopic              :: TopicName
   , consumerGroupId         :: ConsumerGroupId
   , outputSqsUrl            :: String
   , outputMaxQueuedMessages :: Int
+  , rewriteJson             :: [RewriteJson]
   , kafkaConfig             :: Z.KafkaConfig
   } deriving (Show, Eq, Generic)
 
@@ -71,6 +76,12 @@ parserCmdKafkaToSqs = CmdKafkaToSqs
         (  long "output-max-queued-messages"
         <> metavar "NUM_MESSAGES"
         <> help "Max number of messages in output queue before backpressure is applied")
+  <*> many
+      ( strOption
+        (  long "rewrite-json"
+        <> metavar "REWRITE_STRATEGY"
+        <> help "Rewrite JSON strategy")
+      )
   <*> kafkaConfigParser
 
 instance H.HasKafkaConfig (Z.GlobalOptions CmdKafkaToSqs) where
@@ -86,6 +97,7 @@ instance RunApplication CmdKafkaToSqs where
     env       <- ask
     let lgr   = env ^. the @"logger" . the @"logger"
     let stats = env ^. the @"statsClient"
+    let rj    = opt ^. the @"cmd" . the @"rewriteJson" <&> pickRewriteJson & reverse & foldl (.) id
 
     logDebug "Debug logging enabled"
 
@@ -113,8 +125,8 @@ instance RunApplication CmdKafkaToSqs where
           logDebug $ "Polled message: " <> show (K.unPartitionId (crPartition cr)) <> ":" <> show (K.unOffset (crOffset cr))
           processedMessages += 1
           return $ Just cr)
-      .| rightC (handleStream opt sr)                   -- handle messages (see Service.hs)
-      .| everyNSeconds (kafkaConf ^. the @"commitPeriodSec")   -- only commit ever N seconds, so we don't hammer Kafka.
+      .| rightC (handleStream rj opt sr)                      -- handle messages (see Service.hs)
+      .| everyNSeconds (kafkaConf ^. the @"commitPeriodSec")  -- only commit ever N seconds, so we don't hammer Kafka.
       .| effectC' (do
           n <- use processedMessages
           logInfo $ "Committing offsets.  Messages processed: " <> show n)
@@ -135,8 +147,13 @@ onRebalance lgr stats e = case e of
 
 sendSqsC :: (MonadAWS m, MonadResource m)
   => T.Text
-  -> ConduitT (A.Value A.Type) () m ()
-sendSqsC queueUrl = mapMC $ sendSqs queueUrl . T.pack . C8.unpack . toStrict . J.encode
+  -> ConduitT J.Value () m ()
+sendSqsC queueUrl = mapMC
+  $ sendSqs queueUrl
+  . T.pack
+  . C8.unpack
+  . toStrict
+  . J.encode
 
 transmitOneC :: Monad m => ConduitT a a m ()
 transmitOneC = C.await >>= mapM_ yield
@@ -161,10 +178,11 @@ backPressure queueUrl maxMessages = go 0
 -- | Handles the stream of incoming messages.
 -- Emit values downstream because offsets are committed based on their present.
 handleStream  :: MonadApp CmdKafkaToSqs m
-              => Z.GlobalOptions CmdKafkaToSqs
+              => (J.Value -> J.Value)
+              -> Z.GlobalOptions CmdKafkaToSqs
               -> SchemaRegistry
               -> ConduitT (ConsumerRecord (Maybe ByteString) (Maybe ByteString)) () m ()
-handleStream opt sr =
+handleStream rj opt sr =
   mapC crValue                 -- extracting only value from consumer record
   .| L.catMaybes               -- discard empty values
   .| mapMC (decodeMessage sr)  -- decode avro message.
@@ -172,6 +190,8 @@ handleStream opt sr =
   .| effectC (\e -> logDebug $ "SQS message for sending: " <> show e)
   .| backPressure queueUrl maxMessages
   .| effectC (\e -> logDebug $ "Sending SQS: " <> show e)
+  .| mapC J.toJSON
+  .| mapC rj
   .| sendSqsC queueUrl
   where queueUrl    = T.pack (opt ^. the @"cmd" . the @"outputSqsUrl")
         maxMessages = opt ^. the @"cmd" . the @"outputMaxQueuedMessages"
@@ -194,7 +214,6 @@ decodeMessage sr bs = runExceptT $ do
   (sid, payload) <- asExceptTPure id . maybeToEither BadPayloadNoSchemaId $ extractSchemaId $ fromStrict bs
   sch            <- asExceptT DecodeRegistryError (loadSchema sr sid)
   asExceptT (DecodeError sch) (pure $ A.decodeAvro sch payload)
-
 
 ---------------------- TO BE MOVED TO A LIBRARY -------------------------------
 throwLeftC :: MonadAppError m => (e -> AppError) -> ConduitT (Either e a) (Either e a) m ()
@@ -221,3 +240,8 @@ mkStatsTags statsConf = do
   let envTags = catMaybes [deplId]
   return $ envTags <> (statsConf ^. the @"tags" <&> toTag)
   where toTag (Z.StatsTag (k, v)) = S.tag k v
+
+pickRewriteJson :: String -> (J.Value -> J.Value)
+pickRewriteJson strategyName = case strategyName of
+    "fcm-to-rc" -> fileChangeMessageToResourceChanged
+    unknown     -> error $ "Unknown rewrite strategy: " <> unknown
