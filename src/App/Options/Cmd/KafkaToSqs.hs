@@ -103,7 +103,9 @@ instance RunApplication CmdKafkaToSqs where
     let lgr   = env ^. the @"logger" . the @"logger"
     let stats = env ^. the @"statsClient"
 
-    rj <- opt ^. the @"cmd" . the @"rewriteJson" <&> pickRewriteJson & sequence <&> reverse <&> foldl (.) id
+    rjs <- opt ^. the @"cmd" . the @"rewriteJson" <&> pickRewriteJson & sequence
+
+    let rj = rjs & foldr rewriteOrElse (const (throw (AppErr "Failed to rewrite")))
 
     logDebug "Debug logging enabled"
 
@@ -184,10 +186,10 @@ backPressure queueUrl maxMessages = go 0
 -- | Handles the stream of incoming messages.
 -- Emit values downstream because offsets are committed based on their present.
 handleStream  :: MonadApp CmdKafkaToSqs m
-              => (J.Value -> J.Value)
+              => (J.Value -> ExceptT AppError m J.Value)
               -> Z.GlobalOptions CmdKafkaToSqs
               -> SchemaRegistry
-              -> ConduitT (ConsumerRecord (Maybe ByteString) (Maybe ByteString)) () m ()
+              -> ConduitT (ConsumerRecord (Maybe ByteString) (Maybe ByteString)) () (ExceptT AppError m) ()
 handleStream rj opt sr =
   mapC crValue                 -- extracting only value from consumer record
   .| L.catMaybes               -- discard empty values
@@ -197,7 +199,7 @@ handleStream rj opt sr =
   .| backPressure queueUrl maxMessages
   .| effectC (\e -> logDebug $ "Sending SQS: " <> show e)
   .| mapC J.toJSON
-  .| mapC rj
+  .| mapMC rj
   .| sendSqsC queueUrl
   where queueUrl    = T.pack (opt ^. the @"cmd" . the @"outputSqsUrl")
         maxMessages = opt ^. the @"cmd" . the @"outputMaxQueuedMessages"
@@ -247,7 +249,14 @@ mkStatsTags statsConf = do
   return $ envTags <> (statsConf ^. the @"tags" <&> toTag)
   where toTag (Z.StatsTag (k, v)) = S.tag k v
 
-pickRewriteJson :: Monad m => String -> ExceptT AppError m (J.Value -> J.Value)
+rewriteOrElse :: Monad m
+  => (J.Value -> ExceptT AppError m J.Value)
+  -> (J.Value -> ExceptT AppError m J.Value)
+  -> J.Value
+  -> ExceptT AppError m J.Value
+rewriteOrElse f g v = f v `catchError` const (g v)
+
+pickRewriteJson :: Monad m => String -> ExceptT AppError m (J.Value -> ExceptT AppError m J.Value)
 pickRewriteJson strategyName = case strategyName of
   "fcm-to-rc" -> return fileChangeMessageToResourceChanged
   unknown     -> throwError $ AppErr $ "Unknown rewrite strategy: " <> unknown
