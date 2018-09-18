@@ -5,6 +5,7 @@
 module App.JsonSpec (spec) where
 
 import App.Json
+import Control.Monad.Trans.Except
 import HaskellWorks.Hspec.Hedgehog
 import Hedgehog
 import Test.Hspec
@@ -30,4 +31,5 @@ spec = describe "App.JsonSpec" $ do
           { Z.eventTime   = "2018-02-23T03:54:35.970Z"
           , Z.uri         = "s3://bucket-name/1.2.3.4-1514864593.00"
           }
-    fileChangeMessageToResourceChanged (J.toJSON fcm) === (J.toJSON rc)
+    actual <- runExceptT $ fileChangeMessageToResourceChanged (J.toJSON fcm)
+    actual === Right (J.toJSON rc)
