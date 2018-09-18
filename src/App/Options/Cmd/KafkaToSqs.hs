@@ -18,6 +18,7 @@ import Arbor.Logger
 import Conduit
 import Control.Arrow                        (left)
 import Control.Concurrent                   (threadDelay)
+import Control.Concurrent.STM               (atomically, modifyTVar, readTVar)
 import Control.Exception
 import Control.Lens
 import Control.Monad.Except
@@ -92,9 +93,10 @@ instance H.HasKafkaConfig (AppEnv CmdKafkaToSqs) where
 
 instance RunApplication CmdKafkaToSqs where
   runApplication envApp = runApplicationM envApp $ do
-    opt       <- view $ the @"options"
-    kafkaConf <- view H.kafkaConfig
-    env       <- ask
+    opt               <- view $ the @"options"
+    kafkaConf         <- view H.kafkaConfig
+    env               <- ask
+    processedMessages <- view $ the @"counters" . the @"processedMessages"
     let lgr   = env ^. the @"logger" . the @"logger"
     let stats = env ^. the @"statsClient"
     let rj    = opt ^. the @"cmd" . the @"rewriteJson" <&> pickRewriteJson & reverse & foldl (.) id
@@ -123,13 +125,15 @@ instance RunApplication CmdKafkaToSqs where
           return Nothing
         Right cr -> do
           logDebug $ "Polled message: " <> show (K.unPartitionId (crPartition cr)) <> ":" <> show (K.unOffset (crOffset cr))
-          processedMessages += 1
+          liftIO $ atomically $ modifyTVar processedMessages (+1)
           return $ Just cr)
       .| rightC (handleStream rj opt sr)                      -- handle messages (see Service.hs)
       .| everyNSeconds (kafkaConf ^. the @"commitPeriodSec")  -- only commit ever N seconds, so we don't hammer Kafka.
       .| effectC' (do
-          n <- use processedMessages
-          logInfo $ "Committing offsets.  Messages processed: " <> show n)
+          n <- liftIO $ atomically $ readTVar processedMessages
+          logInfo $ "Committing offsets.  Messages processed: " <> show n
+          return ()
+          )
       .| effectC' (commitAllOffsets OffsetCommit consumer)
       .| sinkNull
 

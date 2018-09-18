@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds           #-}
+{-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications    #-}
 
@@ -11,7 +12,9 @@ import App.Options.Cmd.KafkaToSqs
 import App.Options.Parser
 import App.RunApplication
 import Arbor.Logger
+import Control.Concurrent.STM     (newTVarIO)
 import Control.Lens
+import Control.Monad.IO.Class
 import Data.Generics.Product.Any
 import Data.Semigroup             ((<>))
 import Network.AWS.Env
@@ -21,11 +24,20 @@ import System.Environment
 import qualified App.Options.Types as Z
 import qualified Data.Text         as T
 
-mkAppEnv :: StatsClient -> Logger -> Env -> Z.GlobalOptions c -> c -> AppEnv c
-mkAppEnv stats lgr envAws opt cmd =
+mkAppEnv :: MonadIO m
+  => StatsClient
+  -> Logger
+  -> Env
+  -> Z.GlobalOptions c
+  -> c
+  -> m (AppEnv c)
+mkAppEnv stats lgr envAws opt cmd = do
   let newOpt = opt { Z.cmd = cmd }
-      envApp = AppEnv newOpt envAws stats lgr
-  in envApp
+  counters <- do
+    processedMessages <- liftIO $ newTVarIO 0
+    return AppCounters {..}
+  let envApp = AppEnv newOpt envAws stats lgr counters
+  return envApp
 
 main :: IO ()
 main = do
@@ -39,8 +51,8 @@ main = do
       envAws <- mkEnv (opt ^. the @"region") logLvk lgr
       let mkAppEnv2 cmd = mkAppEnv stats (Logger lgr logLvk) envAws (opt { Z.cmd = cmd }) cmd
       res <- case opt ^. the @"cmd" of
-        CmdOfCmdKafkaToSqs cmd -> runApplication (mkAppEnv2 cmd)
-        CmdOfCmdSqsToKafka cmd -> runApplication (mkAppEnv2 cmd)
+        CmdOfCmdKafkaToSqs cmd -> mkAppEnv2 cmd >>= runApplication
+        CmdOfCmdSqsToKafka cmd -> mkAppEnv2 cmd >>= runApplication
         cmd                    -> return $ Left (AppErr ("Not implemented: " <> show cmd))
       case res of
         Left err -> pushLogMessage lgr LevelError ("Exiting: " <> show err)

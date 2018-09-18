@@ -1,8 +1,8 @@
 module App.RunApplication where
 
-import App.AppEnv
 import App.AppError
-import App.AppState
+
+import qualified App.AppEnv as E
 
 class RunApplication c where
-  runApplication :: AppEnv c -> IO (Either AppError AppState)
+  runApplication :: E.AppEnv c -> IO (Either AppError ())
