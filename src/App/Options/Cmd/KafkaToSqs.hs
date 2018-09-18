@@ -20,7 +20,7 @@ import Arbor.Logger
 import Conduit
 import Control.Arrow                        (left)
 import Control.Concurrent                   (threadDelay)
-import Control.Concurrent.STM               (atomically, modifyTVar, readTVar)
+import Control.Concurrent.STM               (atomically, modifyTVar, readTVarIO)
 import Control.Exception
 import Control.Lens
 import Control.Monad.Except
@@ -95,7 +95,7 @@ instance H.HasKafkaConfig (E.AppEnv CmdKafkaToSqs) where
   kafkaConfig = the @"options" . H.kafkaConfig
 
 instance RunApplication CmdKafkaToSqs where
-  runApplication envApp = runApplicationM envApp $ do
+  runApplication envApp = runApplicationM envApp $ runExceptT $ do
     opt               <- view $ the @"options"
     kafkaConf         <- view H.kafkaConfig
     env               <- ask
@@ -116,7 +116,7 @@ instance RunApplication CmdKafkaToSqs where
     sr <- schemaRegistry (kafkaConf ^. the @"schemaRegistryAddress")
 
     logInfo "Running Kafka Consumer"
-    runExceptT $ runConduit $
+    runConduit $
       kafkaSourceNoClose consumer (kafkaConf ^. the @"pollTimeoutMs")
       .| effectC (\e -> logDebug $ "Message: " <> show e)
       .| throwLeftSatisfyC KafkaErr isFatal             -- throw any fatal error
@@ -133,7 +133,7 @@ instance RunApplication CmdKafkaToSqs where
       .| rightC (handleStream rj opt sr)                      -- handle messages (see Service.hs)
       .| everyNSeconds (kafkaConf ^. the @"commitPeriodSec")  -- only commit ever N seconds, so we don't hammer Kafka.
       .| effectC' (do
-          n <- liftIO $ atomically $ readTVar processedMessages
+          n <- liftIO $ readTVarIO processedMessages
           logInfo $ "Committing offsets.  Messages processed: " <> show n)
       .| effectC' (commitAllOffsets OffsetCommit consumer)
       .| sinkNull
