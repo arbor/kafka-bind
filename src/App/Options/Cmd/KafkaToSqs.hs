@@ -116,7 +116,7 @@ instance RunApplication CmdKafkaToSqs where
     sr <- schemaRegistry (kafkaConf ^. the @"schemaRegistryAddress")
 
     logInfo "Running Kafka Consumer"
-    runConduit $
+    runExceptT $ runConduit $
       kafkaSourceNoClose consumer (kafkaConf ^. the @"pollTimeoutMs")
       .| effectC (\e -> logDebug $ "Message: " <> show e)
       .| throwLeftSatisfyC KafkaErr isFatal             -- throw any fatal error
@@ -221,11 +221,11 @@ decodeMessage sr bs = runExceptT $ do
   asExceptT (DecodeError sch) (pure $ A.decodeAvro sch payload)
 
 ---------------------- TO BE MOVED TO A LIBRARY -------------------------------
-throwLeftC :: MonadAppError m => (e -> AppError) -> ConduitT (Either e a) (Either e a) m ()
+throwLeftC :: MonadError AppError m => (e -> AppError) -> ConduitT (Either e a) (Either e a) m ()
 throwLeftC f = awaitForever $ \msg ->
   throwErrorAs f msg
 
-throwLeftSatisfyC :: MonadAppError m => (e -> AppError) -> (e -> Bool) -> ConduitT (Either e a) (Either e a) m ()
+throwLeftSatisfyC :: MonadError AppError m => (e -> AppError) -> (e -> Bool) -> ConduitT (Either e a) (Either e a) m ()
 throwLeftSatisfyC f p = awaitForever $ \case
     Right a -> yield (Right a)
     Left e  | p e -> throwErrorAs f (Left e)

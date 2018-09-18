@@ -69,13 +69,12 @@ instance RunApplication CmdSqsToKafka where
     logInfo "Creating Kafka Producer"
     producer <- mkProducer
 
-    runConduit $
+    runExceptT $ runConduit $
       receiveMessageC sqsUrl
       .| batchByOrFlush (BatchSize 10)
       .| effectC (handleMessages sr kafkaTopic producer)
       .| ackMessages sqsUrl
       .| sinkNull
-    return ()
 
 receiveMessageC :: MonadAWS m => String -> ConduitT () (Maybe Message) m ()
 receiveMessageC sqsUrl = do
