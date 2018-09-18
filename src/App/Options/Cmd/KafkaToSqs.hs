@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds             #-}
+{-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE LambdaCase            #-}
@@ -10,6 +11,7 @@ module App.Options.Cmd.KafkaToSqs where
 
 import App
 import App.AWS.Sqs
+import App.Json
 import App.Kafka
 import App.RunApplication
 import Arbor.Logger
@@ -241,8 +243,5 @@ mkStatsTags statsConf = do
 
 pickRewriteJson :: String -> (J.Value -> J.Value)
 pickRewriteJson strategyName = case strategyName of
-    "fcm-to-rc" -> fcmToRc
+    "fcm-to-rc" -> fileChangeMessageToResourceChanged
     unknown     -> error $ "Unknown rewrite strategy: " <> unknown
-
-fcmToRc :: J.Value -> J.Value
-fcmToRc = id -- TODO Implement this function to convert FileChangeMessage to ResourceChange
