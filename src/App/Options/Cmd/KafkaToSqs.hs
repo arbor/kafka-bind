@@ -9,10 +9,12 @@
 
 module App.Options.Cmd.KafkaToSqs where
 
-import App
+import App.AppError
+import App.Application
 import App.AWS.Sqs
 import App.Json
 import App.Kafka
+import App.Options
 import App.RunApplication
 import Arbor.Logger
 import Conduit
@@ -37,6 +39,7 @@ import Network.AWS
 import Network.StatsD                       as S
 import Options.Applicative
 
+import qualified App.AppEnv            as E
 import qualified App.Has               as H
 import qualified App.Options.Types     as Z
 import qualified Data.Avro.Decode      as A
@@ -88,7 +91,7 @@ parserCmdKafkaToSqs = CmdKafkaToSqs
 instance H.HasKafkaConfig (Z.GlobalOptions CmdKafkaToSqs) where
   kafkaConfig = the @"cmd" . the @"kafkaConfig"
 
-instance H.HasKafkaConfig (AppEnv CmdKafkaToSqs) where
+instance H.HasKafkaConfig (E.AppEnv CmdKafkaToSqs) where
   kafkaConfig = the @"options" . H.kafkaConfig
 
 instance RunApplication CmdKafkaToSqs where
@@ -131,9 +134,7 @@ instance RunApplication CmdKafkaToSqs where
       .| everyNSeconds (kafkaConf ^. the @"commitPeriodSec")  -- only commit ever N seconds, so we don't hammer Kafka.
       .| effectC' (do
           n <- liftIO $ atomically $ readTVar processedMessages
-          logInfo $ "Committing offsets.  Messages processed: " <> show n
-          return ()
-          )
+          logInfo $ "Committing offsets.  Messages processed: " <> show n)
       .| effectC' (commitAllOffsets OffsetCommit consumer)
       .| sinkNull
 
