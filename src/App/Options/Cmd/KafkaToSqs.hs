@@ -102,7 +102,8 @@ instance RunApplication CmdKafkaToSqs where
     processedMessages <- view $ the @"counters" . the @"processedMessages"
     let lgr   = env ^. the @"logger" . the @"logger"
     let stats = env ^. the @"statsClient"
-    let rj    = opt ^. the @"cmd" . the @"rewriteJson" <&> pickRewriteJson & reverse & foldl (.) id
+
+    rj <- opt ^. the @"cmd" . the @"rewriteJson" <&> pickRewriteJson & sequence <&> reverse <&> foldl (.) id
 
     logDebug "Debug logging enabled"
 
@@ -246,7 +247,7 @@ mkStatsTags statsConf = do
   return $ envTags <> (statsConf ^. the @"tags" <&> toTag)
   where toTag (Z.StatsTag (k, v)) = S.tag k v
 
-pickRewriteJson :: String -> (J.Value -> J.Value)
+pickRewriteJson :: Monad m => String -> ExceptT AppError m (J.Value -> J.Value)
 pickRewriteJson strategyName = case strategyName of
-    "fcm-to-rc" -> fileChangeMessageToResourceChanged
-    unknown     -> error $ "Unknown rewrite strategy: " <> unknown
+  "fcm-to-rc" -> return fileChangeMessageToResourceChanged
+  unknown     -> throwError $ AppErr $ "Unknown rewrite strategy: " <> unknown
