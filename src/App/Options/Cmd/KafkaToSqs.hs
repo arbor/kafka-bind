@@ -259,4 +259,5 @@ rewriteOrElse f g v = f v `catchError` const (g v)
 pickRewriteJson :: Monad m => String -> ExceptT AppError m (J.Value -> ExceptT AppError m J.Value)
 pickRewriteJson strategyName = case strategyName of
   "fcm-to-rc" -> return fileChangeMessageToResourceChanged
+  "id"        -> return return
   unknown     -> throwError $ AppErr $ "Unknown rewrite strategy: " <> unknown
