@@ -14,6 +14,7 @@ import Network.AWS.SQS
 import qualified Antiope.Contract.SQS.FileChangeMessage as Z
 import qualified Data.ByteString.Char8                  as C8
 import qualified Data.Text                              as T
+import qualified Network.URI                            as URI
 
 data SqsMessage
   = SqsMessageOfS3TestEvent
@@ -67,7 +68,7 @@ decodeSqsMessage msg = do
       { Z.eventName  = eventName
       , Z.eventTime  = eventTime
       , Z.bucketName = bucketName
-      , Z.objectKey  = objectKey
+      , Z.objectKey  = T.pack . URI.unEscapeString . T.unpack $ objectKey
       , Z.objectSize = objectSize
       , Z.objectTag  = objectTag
       }
