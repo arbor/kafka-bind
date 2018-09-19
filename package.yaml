@@ -65,6 +65,7 @@ dependencies:
 - monad-logger
 - mtl
 - network
+- network-uri
 - random
 - resourcet
 - stm
