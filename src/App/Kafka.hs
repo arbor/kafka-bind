@@ -77,10 +77,11 @@ mkProducer = do
   snd <$> allocate prod K.closeProducer
 
 logAndDieHard :: TimedFastLogger -> K.DeliveryReport -> IO ()
-logAndDieHard lgr err = do
+logAndDieHard lgr (K.DeliveryFailure _ err) = do
   let errMsg = "Producer is unable to deliver messages: " <> show err
   pushLogMessage lgr LevelError errMsg
   error errMsg
+logAndDieHard _ _ = return ()
 
 kafkaLogLevel :: LogLevel -> K.KafkaLogLevel
 kafkaLogLevel l = case l of
