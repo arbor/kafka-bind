@@ -6,11 +6,11 @@
 module App.AppEnv where
 
 import Arbor.Logger              (LogLevel, TimedFastLogger)
+import Arbor.Network.StatsD      (StatsClient)
 import Control.Concurrent.STM    (TVar)
 import Data.Generics.Product.Any
 import GHC.Generics
 import Network.AWS               (Env, HasEnv (..))
-import Network.StatsD            (StatsClient)
 
 import qualified App.Options.Types as Z
 

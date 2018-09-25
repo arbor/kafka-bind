@@ -41,13 +41,13 @@ dependencies:
 - amazonka-s3
 - antiope-contract
 - antiope-sqs
+- arbor-datadog
 - avro
 - bifunctors
 - bytestring
 - conduit
 - conduit-combinators
 - containers
-- datadog
 - directory
 - either
 - errors

@@ -4,13 +4,13 @@
 
 module App.Options where
 
+import Arbor.Network.StatsD.Type (SampleRate (..))
 import Control.Lens
 import Control.Monad.Logger      (LogLevel (..))
 import Data.Generics.Product.Any
 import Data.Semigroup            ((<>))
 import Kafka.Types
 import Network.AWS.Data.Text     (FromText (..), fromText)
-import Network.StatsD            (SampleRate (..))
 import Options.Applicative
 import Text.Read                 (readEither)
 

@@ -3,9 +3,9 @@
 
 module App.Has where
 
+import Arbor.Network.StatsD      (StatsClient)
 import Control.Lens
 import Data.Generics.Product.Any
-import Network.StatsD            (StatsClient)
 
 import qualified App.AppEnv        as Z
 import qualified App.Options.Types as Z

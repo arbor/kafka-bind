@@ -12,13 +12,13 @@ import App.Options.Cmd.KafkaToSqs
 import App.Options.Parser
 import App.RunApplication
 import Arbor.Logger
+import Arbor.Network.StatsD       (StatsClient)
 import Control.Concurrent.STM     (newTVarIO)
 import Control.Lens
 import Control.Monad.IO.Class
 import Data.Generics.Product.Any
 import Data.Semigroup             ((<>))
 import Network.AWS.Env
-import Network.StatsD             as S
 import System.Environment
 
 import qualified App.Options.Types as Z
