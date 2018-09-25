@@ -2,13 +2,13 @@
 
 module App.Options.Types where
 
-import Control.Monad.Logger (LogLevel (..))
-import Data.Text            (Text)
+import Arbor.Network.StatsD.Type (SampleRate (..))
+import Control.Monad.Logger      (LogLevel (..))
+import Data.Text                 (Text)
 import GHC.Generics
 import Kafka.Types
-import Network.AWS.S3.Types (Region (..))
-import Network.Socket       (HostName)
-import Network.StatsD       (SampleRate (..))
+import Network.AWS.S3.Types      (Region (..))
+import Network.Socket            (HostName)
 
 newtype StatsTag = StatsTag (Text, Text) deriving (Show, Eq)
 

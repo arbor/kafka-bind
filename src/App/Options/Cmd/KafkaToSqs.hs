@@ -17,6 +17,7 @@ import App.Kafka
 import App.Options
 import App.RunApplication
 import Arbor.Logger
+import Arbor.Network.StatsD                 (StatsClient)
 import Conduit
 import Control.Arrow                        (left)
 import Control.Concurrent                   (threadDelay)
@@ -36,20 +37,21 @@ import HaskellWorks.Data.Conduit.Combinator
 import Kafka.Avro
 import Kafka.Conduit.Source
 import Network.AWS
-import Network.StatsD                       as S
 import Options.Applicative
 
-import qualified App.AppEnv            as E
-import qualified App.Has               as H
-import qualified App.Options.Types     as Z
-import qualified Data.Avro.Decode      as A
-import qualified Data.Avro.Schema      as A
-import qualified Data.Avro.Types       as A
-import qualified Data.ByteString.Char8 as C8
-import qualified Data.Conduit          as C
-import qualified Data.Conduit.List     as L
-import qualified Data.Text             as T
-import qualified Kafka.Conduit.Source  as K
+import qualified App.AppEnv                as E
+import qualified App.Has                   as H
+import qualified App.Options.Types         as Z
+import qualified Arbor.Network.StatsD      as S
+import qualified Arbor.Network.StatsD.Type as Z
+import qualified Data.Avro.Decode          as A
+import qualified Data.Avro.Schema          as A
+import qualified Data.Avro.Types           as A
+import qualified Data.ByteString.Char8     as C8
+import qualified Data.Conduit              as C
+import qualified Data.Conduit.List         as L
+import qualified Data.Text                 as T
+import qualified Kafka.Conduit.Source      as K
 
 type RewriteJson = String
 
@@ -146,11 +148,11 @@ onRebalance lgr stats e = case e of
   RebalanceBeforeAssign ps -> do
     let partitionsText = "Partitions assigned: " <> T.pack (show (K.unPartitionId . snd <$> ps))
     pushLogMessage lgr LevelInfo $ "kafka-to-sqs: Rebalanced. " <> partitionsText
-    sendEvt stats $ event "Rebalanced" partitionsText
+    S.sendEvt stats $ S.event "Rebalanced" partitionsText
   RebalanceRevoke ps -> do
     let partitionsText = "Partitions revoked: " <> T.pack (show (K.unPartitionId . snd <$> ps))
     pushLogMessage lgr LevelInfo $ "kafka-to-sqs: Rebalancing. " <> partitionsText
-    sendEvt stats $ event "Rebalancing" partitionsText
+    S.sendEvt stats $ S.event "Rebalancing" partitionsText
   _ -> pure ()
 
 sendSqsC :: (MonadAWS m, MonadResource m)
@@ -239,12 +241,12 @@ throwLeftSatisfyC f p = awaitForever $ \case
 withStatsClient :: AppName -> Z.StatsConfig -> (StatsClient -> IO a) -> IO a
 withStatsClient appName statsConf f = do
   globalTags <- mkStatsTags statsConf
-  let statsOpts = DogStatsSettings (statsConf ^. the @"host") (statsConf ^. the @"port")
-  bracket (createStatsClient statsOpts (MetricName appName) globalTags) closeStatsClient f
+  let statsOpts = Z.DogStatsSettings (statsConf ^. the @"host") (statsConf ^. the @"port")
+  bracket (S.createStatsClient statsOpts (Z.MetricName appName) globalTags) S.closeStatsClient f
 
-mkStatsTags :: Z.StatsConfig -> IO [Tag]
+mkStatsTags :: Z.StatsConfig -> IO [Z.Tag]
 mkStatsTags statsConf = do
-  deplId <- envTag "TASK_DEPLOY_ID" "deploy_id"
+  deplId <- S.envTag "TASK_DEPLOY_ID" "deploy_id"
   let envTags = catMaybes [deplId]
   return $ envTags <> (statsConf ^. the @"tags" <&> toTag)
   where toTag (Z.StatsTag (k, v)) = S.tag k v

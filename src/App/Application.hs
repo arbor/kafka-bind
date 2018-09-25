@@ -14,6 +14,7 @@ module App.Application where
 import App.AppError
 import App.Orphans                  ()
 import Arbor.Logger
+import Arbor.Network.StatsD         as S
 import Control.Lens
 import Control.Monad.Catch
 import Control.Monad.Except
@@ -23,7 +24,6 @@ import Control.Monad.Trans.Resource
 import Data.Generics.Product.Any
 import Data.Text                    (Text)
 import Network.AWS                  as AWS hiding (LogLevel)
-import Network.StatsD               as S
 
 import qualified App.AppEnv as E
 
@@ -56,7 +56,7 @@ deriving instance MonadApp o (Application o)
 instance MonadStats (Application o) where
   getStatsClient = view $ the @"statsClient"
 
-instance MonadStats (Application o) => MonadStats (ExceptT e (Application o)) where
+instance {-# OVERLAPPING #-} MonadStats (Application o) => MonadStats (ExceptT e (Application o)) where
   getStatsClient = lift getStatsClient
 
 instance MonadApp o (Application o) => MonadApp o ((ExceptT e) (Application o)) where
