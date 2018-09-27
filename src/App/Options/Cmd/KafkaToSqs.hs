@@ -31,7 +31,6 @@ import Data.ByteString                      (ByteString)
 import Data.ByteString.Lazy                 (fromStrict, toStrict)
 import Data.Generics.Product.Any
 import Data.Maybe                           (catMaybes)
-import Data.Monoid
 import GHC.Generics
 import HaskellWorks.Data.Conduit.Combinator
 import Kafka.Avro

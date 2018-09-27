@@ -12,7 +12,6 @@ import App.AppError
 import Control.Lens
 import Control.Monad.Trans.Except
 import Data.Generics.Product.Any
-import Data.Monoid
 
 import qualified Antiope.Contract.SQS.FileChangeMessage as SQSM
 import qualified Antiope.Contract.SQS.ResourceChanged   as SQSM
