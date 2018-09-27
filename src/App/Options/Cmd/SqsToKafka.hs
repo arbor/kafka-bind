@@ -24,7 +24,6 @@ import Control.Monad                        (when)
 import Control.Monad.Except
 import Data.Either.Combinators
 import Data.Generics.Product.Any
-import Data.Monoid
 import GHC.Generics
 import HaskellWorks.Data.Conduit.Combinator
 import Kafka.Avro

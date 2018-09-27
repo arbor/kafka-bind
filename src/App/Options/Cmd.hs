@@ -10,7 +10,6 @@ import App.Options.Cmd.Help       as C
 import App.Options.Cmd.KafkaToSqs as C
 import App.Options.Cmd.SqsToKafka as C
 import Control.Lens
-import Data.Monoid
 import GHC.Generics
 import Options.Applicative
 
