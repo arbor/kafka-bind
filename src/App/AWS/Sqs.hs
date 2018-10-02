@@ -17,11 +17,12 @@ import qualified Text.Read as T
 
 sendSqs :: (MonadResource m, MonadAWS m)
             => Text
-            -> Text
+            -> [Text]
             -> m ()
-sendSqs sqsUrl msgBody = do
-  void $ send $ sendMessage sqsUrl msgBody
-  return ()
+sendSqs sqsUrl msgBodies = do
+  let idxs = T.pack . show <$> [1 :: Int ..]
+  let entries = (\(r, i) -> sendMessageBatchRequestEntry i r) <$> zip msgBodies idxs
+  void . send $ sendMessageBatch sqsUrl & smbEntries .~ entries
 
 getSqsApproximateNumberOfMessages
   :: (MonadResource m, MonadAWS m)

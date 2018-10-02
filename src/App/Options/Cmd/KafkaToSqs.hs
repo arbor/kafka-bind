@@ -20,7 +20,6 @@ import Arbor.Logger
 import Arbor.Network.StatsD                 (StatsClient)
 import Conduit
 import Control.Arrow                        (left)
-import Control.Concurrent                   (threadDelay)
 import Control.Concurrent.STM               (atomically, modifyTVar, readTVarIO)
 import Control.Exception
 import Control.Lens
@@ -48,7 +47,6 @@ import qualified Data.Avro.Decode          as A
 import qualified Data.Avro.Schema          as A
 import qualified Data.Avro.Types           as A
 import qualified Data.ByteString.Char8     as C8
-import qualified Data.Conduit              as C
 import qualified Data.Conduit.List         as L
 import qualified Data.Text                 as T
 import qualified Kafka.Conduit.Source      as K
@@ -59,7 +57,6 @@ data CmdKafkaToSqs = CmdKafkaToSqs
   { inputTopic              :: TopicName
   , consumerGroupId         :: ConsumerGroupId
   , outputSqsUrl            :: String
-  , outputMaxQueuedMessages :: Int
   , rewriteJson             :: [RewriteJson]
   , kafkaConfig             :: Z.KafkaConfig
   } deriving (Show, Eq, Generic)
@@ -78,10 +75,6 @@ parserCmdKafkaToSqs = CmdKafkaToSqs
         (  long "output-sqs-url"
         <> metavar "OUTPUT_SQS_URL"
         <> help "Kafka consumer group id")
-  <*> readOption
-        (  long "output-max-queued-messages"
-        <> metavar "NUM_MESSAGES"
-        <> help "Max number of messages in output queue before backpressure is applied")
   <*> many
       ( strOption
         (  long "rewrite-json"
@@ -155,36 +148,6 @@ onRebalance lgr stats e = case e of
     S.sendEvt stats $ S.event "Rebalancing" partitionsText
   _ -> pure ()
 
-sendSqsC :: (MonadAWS m, MonadResource m)
-  => T.Text
-  -> ConduitT J.Value () m ()
-sendSqsC queueUrl = mapMC
-  $ sendSqs queueUrl
-  . T.pack
-  . C8.unpack
-  . toStrict
-  . J.encode
-
-transmitOneC :: Monad m => ConduitT a a m ()
-transmitOneC = C.await >>= mapM_ yield
-
-backPressure :: (MonadAWS m, MonadResource m, MonadLogger m) => T.Text -> Int -> ConduitT a a m ()
-backPressure queueUrl maxMessages = go 0
-  where go n = if n > 0
-          then do
-            transmitOneC
-            go 0
-          else do
-            maybeNumMessages <- lift $ getSqsApproximateNumberOfMessages queueUrl
-            case maybeNumMessages of
-              Just numMessages -> if numMessages > maxMessages
-                then do
-                  liftIO $ threadDelay 1000000 -- µs
-                  logInfo $ "Target queue " <> show queueUrl <> " is full (" <> show numMessages <> " messages)"
-                  go 0
-                else go (maxMessages - numMessages)
-              Nothing -> logWarn $ "Could not get queue attributes for queueUrl " <> show queueUrl
-
 -- | Handles the stream of incoming messages.
 -- Emit values downstream because offsets are committed based on their present.
 handleStream  :: MonadApp CmdKafkaToSqs m
@@ -197,14 +160,19 @@ handleStream rj opt sr =
   .| L.catMaybes               -- discard empty values
   .| mapMC (decodeMessage sr)  -- decode avro message.
   .| mapC failBadly            -- error on decode failure
-  .| effectC (\e -> logDebug $ "SQS message for sending: " <> show e)
-  .| backPressure queueUrl maxMessages
-  .| effectC (\e -> logDebug $ "Sending SQS: " <> show e)
   .| mapC J.toJSON
   .| mapMC rj
-  .| sendSqsC queueUrl
+  .| mapC pure
+  .| batchByOrFlush 10
+  .| mapMC (sendSqsBatch queueUrl)
   where queueUrl    = T.pack (opt ^. the @"cmd" . the @"outputSqsUrl")
-        maxMessages = opt ^. the @"cmd" . the @"outputMaxQueuedMessages"
+
+sendSqsBatch :: (MonadAWS m, MonadResource m)
+  => T.Text
+  -> [J.Value]
+  -> m ()
+sendSqsBatch queueUrl msgs =
+  sendSqs queueUrl (msgs <&> T.pack . C8.unpack . toStrict . J.encode)
 
 asExceptT :: Monad m => (e -> e') -> m (Either e a) -> ExceptT e' m a
 asExceptT f me = ExceptT $ left f <$> me
