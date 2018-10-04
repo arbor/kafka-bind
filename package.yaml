@@ -39,8 +39,8 @@ dependencies:
 - amazonka-core
 - amazonka-sqs
 - amazonka-s3
-- antiope-contract
-- antiope-sqs
+- antiope-contract >= 6.1.0
+- antiope-sqs >= 6.1.0
 - arbor-datadog
 - avro
 - bifunctors
